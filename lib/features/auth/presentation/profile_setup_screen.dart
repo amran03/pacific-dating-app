@@ -2,13 +2,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
-import 'package:pacific_dating_app/core/services/firestore_service.dart';
+import 'package:pacific_dating_app/core/services/supabase_db_service.dart';
+import 'package:pacific_dating_app/core/services/storage_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
-import 'package:pacific_dating_app/screens/pacific_launch_screen.dart'; // Hakikisha njia hii ni sahihi kulingana na folda zako
+import 'package:pacific_dating_app/screens/pacific_launch_screen.dart';
 
 class SetupAccountScreen extends StatefulWidget {
   final String phoneNumber;
@@ -24,24 +24,17 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   int _currentStep = 0;
   final int _totalSteps = 9;
 
-  // Dynamic Theme Color state
   Color _themeColor = AppColors.primary;
 
-  // Dynamic Gradient for Theme
   Gradient get _themeGradient => LinearGradient(
     colors: [
       _themeColor,
-      _themeColor.withValues(
-        alpha: ((_themeColor.r * 255.0).round().clamp(0, 255) + 40)
-            .clamp(0, 255) /
-            255.0,
-      ),
+      _themeColor.withValues(alpha: 0.8),
     ],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
-  // User Form Data State
   final TextEditingController _nameController = TextEditingController();
   DateTime? _selectedBirthDate;
   int _calculatedAge = 0;
@@ -51,15 +44,14 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   String? _interestedGender;
   String? _relationshipGoal;
 
-  // Permissions State
   bool _locationGranted = false;
   bool _notificationGranted = false;
 
   final ImagePicker _picker = ImagePicker();
-  final FirestoreService _firestoreService = FirestoreService();
+  final SupabaseDbService _dbService = SupabaseDbService();
+  final StorageService _storageService = StorageService();
   bool _isSaving = false;
 
-  // Dynamic Relationship Goals based on Gender
   List<String> get _relationshipGoals {
     if (_selectedGender == "Female") {
       return [
@@ -107,7 +99,6 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: Colors.white,
-          elevation: 10,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text(
             "Una miaka $age? 🎂",
@@ -128,7 +119,6 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _themeColor,
-                elevation: 4,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
               onPressed: () {
@@ -157,7 +147,6 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       _showSnackBar("Tafadhali ingiza jina lako la kwanza kuendelea.");
       return;
     }
-
     if (_currentStep == 1) {
       if (_selectedBirthDate == null) {
         _showSnackBar("Tafadhali chagua tarehe yako ya kuzaliwa.");
@@ -169,27 +158,22 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       });
       return;
     }
-
     if (_currentStep == 2 && _selectedGender == null) {
       _showSnackBar("Tafadhali chagua jinsia yako.");
       return;
     }
-
     if (_currentStep == 3 && _profileImage == null) {
       _showSnackBar("Tafadhali weka picha yako kuu ya profile.");
       return;
     }
-
     if (_currentStep == 4 && _bioController.text.trim().isEmpty) {
       _showSnackBar("Tafadhali andika maelezo mafupi kukuhusu.");
       return;
     }
-
     if (_currentStep == 5 && _interestedGender == null) {
       _showSnackBar("Tafadhali chagua jinsia unayovutiwa nayo.");
       return;
     }
-
     if (_currentStep == 6 && _relationshipGoal == null) {
       _showSnackBar("Tafadhali chagua aina ya uhusiano unayotafuta.");
       return;
@@ -224,14 +208,9 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Future<void> _finishSetup() async {
     if (_isSaving) return;
-
     setState(() => _isSaving = true);
 
-    // Hatua ya mwisho kabisa: kama bado hakuna akaunti ya Firebase
-    // (mtumiaji hajaweka password bado), mfungulie sasa hivi skrini ya
-    // kutengeneza password. SetupAccountScreen inabaki kwenye stack, hivyo
-    // taarifa zote za profile alizoshajaza (jina, picha, bio n.k.) hazipotei.
-    User? currentUser = FirebaseAuth.instance.currentUser;
+    User? currentUser = Supabase.instance.client.auth.currentUser;
     if (currentUser == null) {
       final bool? accountCreated = await Navigator.push<bool>(
         context,
@@ -244,8 +223,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         setState(() => _isSaving = false);
         return;
       }
-
-      currentUser = FirebaseAuth.instance.currentUser;
+      currentUser = Supabase.instance.client.auth.currentUser;
       if (currentUser == null) {
         _showSnackBar("Imeshindikana kutengeneza akaunti. Jaribu tena.");
         setState(() => _isSaving = false);
@@ -255,21 +233,12 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
     try {
       String? imageUrl;
-
-      // 1. Pandisha picha ya profile kwenye Firebase Storage (ikiwa mtumiaji ameweka moja)
       if (_profileImage != null) {
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('profile_images')
-            .child('${currentUser.uid}.jpg');
-
-        await ref.putFile(_profileImage!);
-        imageUrl = await ref.getDownloadURL();
+        imageUrl = await _storageService.uploadProfileImage(currentUser.id, _profileImage!);
       }
 
-      // 2. Kusanya taarifa zote za hatua za usajili kuwa UserModel moja
       final UserModel userModel = UserModel(
-        uid: currentUser.uid,
+        uid: currentUser.id,
         name: _nameController.text.trim(),
         age: _calculatedAge,
         birthDate: _selectedBirthDate,
@@ -284,14 +253,10 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         isProfileComplete: true,
       );
 
-      // 3. Hifadhi Firestore. merge:true inahakikisha 'phoneNumber' na
-      //    'authEmail' zilizowekwa na CreatePasswordScreen hazifutiki.
-      await _firestoreService.saveUserProfile(userModel);
+      await _dbService.saveUserProfile(userModel);
 
       if (!mounted) return;
-
       _showSnackBar("Akaunti yako imekamilika kikamilifu! 🎉", color: Colors.green);
-
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const PacificLaunchScreen()),
@@ -321,8 +286,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 2,
-        shadowColor: Colors.black.withValues(alpha: 0.1),
+        elevation: 1,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary),
           onPressed: _previousStep,
@@ -423,7 +387,31 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     );
   }
 
-  // --- STEPS ---
+  Widget _buildStepLayout({required String title, required String subtitle, required Widget child}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: AppColors.textPrimary, letterSpacing: -0.5),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 28),
+            child,
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildNameStep() {
     return _buildStepLayout(
@@ -440,14 +428,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             filled: true,
             fillColor: Colors.white,
             prefixIcon: Icon(Icons.person_outline_rounded, color: _themeColor),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide(color: _themeColor, width: 2),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide.none,
-            ),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: _themeColor, width: 2)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
           ),
         ),
       ),
@@ -466,9 +448,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             firstDate: DateTime(1950),
             lastDate: DateTime(2008),
           );
-          if (picked != null) {
-            setState(() => _selectedBirthDate = picked);
-          }
+          if (picked != null) setState(() => _selectedBirthDate = picked);
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -480,11 +460,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 _selectedBirthDate == null
                     ? "Bonyeza hapa kuchagua Tarehe"
                     : "${_selectedBirthDate!.day} / ${_selectedBirthDate!.month} / ${_selectedBirthDate!.year}",
-                style: TextStyle(
-                  fontSize: 17,
-                  color: _selectedBirthDate == null ? Colors.grey.shade500 : AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 17, color: _selectedBirthDate == null ? Colors.grey.shade500 : AppColors.textPrimary, fontWeight: FontWeight.bold),
               ),
               Icon(Icons.calendar_today_rounded, color: _themeColor, size: 26),
             ],
@@ -515,7 +491,6 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         setState(() {
           _selectedGender = genderValue;
           _themeColor = (genderValue == "Male") ? Colors.blue.shade700 : AppColors.primary;
-          // Reset relationship goal when gender changes to prevent invalid selections
           _relationshipGoal = null;
         });
       },
@@ -537,14 +512,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: isSelected ? _themeColor : AppColors.textPrimary,
-              ),
-            ),
+            Text(label, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: isSelected ? _themeColor : AppColors.textPrimary)),
             if (isSelected) Icon(Icons.check_circle_rounded, color: _themeColor, size: 26),
           ],
         ),
@@ -574,26 +542,17 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               ],
             ),
             child: _profileImage != null
-                ? ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: Image.file(_profileImage!, fit: BoxFit.cover),
-            )
+                ? ClipRRect(borderRadius: BorderRadius.circular(28), child: Image.file(_profileImage!, fit: BoxFit.cover))
                 : Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: _themeColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: _themeColor.withValues(alpha: 0.1), shape: BoxShape.circle),
                   child: Icon(Icons.add_a_photo_rounded, size: 48, color: _themeColor),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  "Gusa Kuweka Picha",
-                  style: TextStyle(color: _themeColor, fontWeight: FontWeight.w800, fontSize: 16),
-                ),
+                Text("Gusa Kuweka Picha", style: TextStyle(color: _themeColor, fontWeight: FontWeight.w800, fontSize: 16)),
               ],
             ),
           ),
@@ -618,14 +577,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             hintStyle: TextStyle(color: Colors.grey.shade400),
             filled: true,
             fillColor: Colors.white,
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide(color: _themeColor, width: 2),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(18),
-              borderSide: BorderSide.none,
-            ),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: _themeColor, width: 2)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
           ),
         ),
       ),
@@ -671,7 +624,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         children: [
           _buildPermissionSwitch(
             title: "Location Access (Eneo)",
-            subtitle: "Inasaidia kupata na kuonyesha watu waliopo karibu nawe kijiografia.",
+            subtitle: "Inasaidie kupata na kuonyesha watu waliopo karibu nawe kijiografia.",
             icon: Icons.location_on_rounded,
             value: _locationGranted,
             onChanged: (val) => setState(() => _locationGranted = val),
@@ -689,7 +642,6 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     );
   }
 
-  // --- PAGE 9: FINAL COMPLETION PAGE ---
   Widget _buildFinalCompletionStep() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -704,11 +656,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 gradient: _themeGradient,
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
-                  BoxShadow(
-                    color: _themeColor.withValues(alpha: 0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
+                  BoxShadow(color: _themeColor.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 10)),
                 ],
               ),
               child: Column(
@@ -716,62 +664,18 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                   Stack(
                     alignment: Alignment.center,
                     children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: _profileImage != null
-                            ? ClipRRect(
-                          borderRadius: BorderRadius.circular(50),
-                          child: Image.file(_profileImage!, fit: BoxFit.cover),
-                        )
-                            : Icon(Icons.person, size: 60, color: _themeColor),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.check, color: Colors.white, size: 20),
-                        ),
-                      ),
+                      Container(width: 100, height: 100, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: _profileImage != null ? ClipRRect(borderRadius: BorderRadius.circular(50), child: Image.file(_profileImage!, fit: BoxFit.cover)) : Icon(Icons.person, size: 60, color: _themeColor)),
+                      Positioned(bottom: 0, right: 0, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle), child: const Icon(Icons.check, color: Colors.white, size: 20))),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    "Karibu Sana, ${_nameController.text.isNotEmpty ? _nameController.text : 'Mgeni'}! 🎉",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                    ),
-                  ),
+                  Text("Karibu Sana, ${_nameController.text.isNotEmpty ? _nameController.text : 'Mgeni'}! 🎉", textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white)),
                   const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      "Profile Yako Iko Tayari 100%",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                    ),
-                  ),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)), child: const Text("Profile Yako Iko Tayari 100%", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(20.0),
@@ -779,16 +683,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.stars_rounded, color: _themeColor, size: 28),
-                      const SizedBox(width: 10),
-                      const Text(
-                        "Muhtasari wa Profile",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
-                      ),
-                    ],
-                  ),
+                  Row(children: [Icon(Icons.stars_rounded, color: _themeColor, size: 28), const SizedBox(width: 10), const Text("Muhtasari wa Profile", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary))]),
                   const Divider(height: 24),
                   _buildSummaryRow(Icons.cake_rounded, "Umri", "$_calculatedAge Miaka"),
                   _buildSummaryRow(Icons.wc_rounded, "Unatafuta", _interestedGender ?? "Haijachaguliwa"),
@@ -796,52 +691,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
-
-            Text(
-              "Bonyeza 'Continue' hapo chini kuweka password yako ya mwisho, kisha uanze kuona watu wanaokuzunguka na kuanza safari yako ya mahusiano! 🔥",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- HELPER WIDGETS ---
-
-  Widget _buildStepLayout({required String title, required String subtitle, required Widget child}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 10),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w900,
-                color: AppColors.textPrimary,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 15,
-                color: AppColors.textSecondary,
-                height: 1.5,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 28),
-            child,
+            Text("Bonyeza 'Continue' hapo chini kuweka password yako ya mwisho, kisha uanze kuona watu wanaokuzunguka na kuanza safari yako ya mahusiano! 🔥", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5, fontWeight: FontWeight.w500)),
             const SizedBox(height: 20),
           ],
         ),
@@ -861,24 +712,13 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           border: Border.all(color: isSelected ? _themeColor : Colors.transparent, width: 2.5),
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
-            BoxShadow(
-              color: isSelected ? _themeColor.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
+            BoxShadow(color: isSelected ? _themeColor.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 5)),
           ],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? _themeColor : AppColors.textPrimary,
-              ),
-            ),
+            Text(label, style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: isSelected ? _themeColor : AppColors.textPrimary)),
             if (isSelected) Icon(Icons.check_circle_rounded, color: _themeColor, size: 24),
           ],
         ),
@@ -886,40 +726,15 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     );
   }
 
-  Widget _buildPermissionSwitch({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool value,
-    required Function(bool) onChanged,
-  }) {
+  Widget _buildPermissionSwitch({required String title, required String subtitle, required IconData icon, required bool value, required Function(bool) onChanged}) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _buildBoxDecoration(),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: _themeColor.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: _themeColor, size: 28),
-          ),
+          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _themeColor.withValues(alpha: 0.12), shape: BoxShape.circle), child: Icon(icon, color: _themeColor, size: 28)),
           const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), const SizedBox(height: 4), Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3))])),
           Switch(
             value: value,
             activeThumbColor: _themeColor,
@@ -927,20 +742,13 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               if (val) {
                 if (title.contains("Location")) {
                   PermissionStatus status = await Permission.location.request();
-                  if (status.isGranted) {
-                    onChanged(true);
-                  } else if (status.isPermanentlyDenied) {
-                    openAppSettings();
-                  }
+                  if (status.isGranted) onChanged(true);
+                  else if (status.isPermanentlyDenied) openAppSettings();
                 } else if (title.contains("Notifications")) {
                   PermissionStatus status = await Permission.notification.request();
-                  if (status.isGranted) {
-                    onChanged(true);
-                  }
+                  if (status.isGranted) onChanged(true);
                 }
-              } else {
-                onChanged(false);
-              }
+              } else onChanged(false);
             },
           ),
         ],
@@ -956,13 +764,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           Icon(icon, size: 20, color: _themeColor),
           const SizedBox(width: 12),
           Text("$title: ", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          Expanded(child: Text(value, style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textPrimary), overflow: TextOverflow.ellipsis)),
         ],
       ),
     );
@@ -973,11 +775,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       color: Colors.white,
       borderRadius: BorderRadius.circular(22),
       boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 15,
-          offset: const Offset(0, 5),
-        ),
+        BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 15, offset: const Offset(0, 5)),
       ],
     );
   }

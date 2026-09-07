@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/auth/presentation/new_password_screen.dart';
 
@@ -15,7 +16,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final TextEditingController _emailController = TextEditingController();
   bool _isLoading = false;
 
-  void _onSendRecoveryCodePressed() {
+  Future<void> _onSendRecoveryCodePressed() async {
     final String email = _emailController.text.trim();
 
     if (email.isEmpty) {
@@ -30,25 +31,37 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     setState(() => _isLoading = true);
 
-    // Ku-simulate utumaji wa code kisha kufungua Pop-Up
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
       if (mounted) {
         setState(() => _isLoading = false);
         _showRecoveryCodeBottomSheet(email);
       }
-    });
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Kosa: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
   }
 
-  // Pop-up ya Recovery Code yenye Blur na Dim/Shade
   void _showRecoveryCodeBottomSheet(String email) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Inafanya popup ichukue nafasi inayostahili kulingana na content
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Stack(
           children: [
-            // Backdrop Blur pamoja na Dim Shade
             Positioned.fill(
               child: GestureDetector(
                 onTap: () => Navigator.pop(context),
@@ -60,8 +73,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 ),
               ),
             ),
-
-            // Sheet yenyewe yenye Vyumba 6 vya Code
             Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -93,8 +104,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 12),
-
-              // HEADER — gradient icon yenye glow (entrance animation)
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 500),
@@ -127,7 +136,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
               const Text(
                 "Reset Password",
                 style: TextStyle(
@@ -138,8 +146,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // Staggered entrance: subtitle
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0.0, end: 1.0),
                 duration: const Duration(milliseconds: 500),
@@ -154,7 +160,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   );
                 },
                 child: const Text(
-                  "Weka email yako iliyosajiliwa ili tukutumie recovery code ya tarakimu 6.",
+                  "Weka email yako iliyosajiliwa ili tukutumie maelekezo ya kubadili password.",
                   style: TextStyle(
                     fontSize: 15,
                     height: 1.5,
@@ -163,8 +169,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 ),
               ),
               const SizedBox(height: 36),
-
-              // Email Input Field
               const Text(
                 "Email Address",
                 style: TextStyle(
@@ -206,8 +210,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 ),
               ),
               const SizedBox(height: 36),
-
-              // Send Recovery Code Button — gradient CTA
               SizedBox(
                 width: double.infinity,
                 height: 58,
@@ -246,7 +248,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                             ),
                           )
                         : const Text(
-                            "Send Recovery Code",
+                            "Send Reset Link",
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -265,7 +267,6 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   }
 }
 
-// Widget ya Content ya Pop-up ikiwa na vyumba 6 vya Code
 class _RecoveryCodePopupContent extends StatefulWidget {
   const _RecoveryCodePopupContent();
 
@@ -290,18 +291,9 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
   }
 
   void _onConfirmPressed() {
-    String code = _codeControllers.map((c) => c.text).join();
-    if (code.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Tafadhali ingiza recovery code yote ya tarakimu 6."),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
-
-    // Funga pop-up kisha mpeleke mtumiaji NewPasswordScreen
+    // Kwa Supabase, mara nyingi tunatumia email link.
+    // Ikiwa unatumia OTP (namba 6), unahitaji Supabase GoTrue OTP verification.
+    // Hapa nitaelekeza tu kwenda NewPasswordScreen kama mfano.
     Navigator.pop(context);
     Navigator.push(
       context,
@@ -323,9 +315,8 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
         ),
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min, // Dimension inategemea content pekee
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Indicator bar ya kupusha chini
           Container(
             width: 40,
             height: 4,
@@ -335,9 +326,8 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
             ),
           ),
           const SizedBox(height: 20),
-
           const Text(
-            "Weka Recovery Code 🔑",
+            "Tumetuma Email 📧",
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -345,10 +335,8 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
             ),
           ),
           const SizedBox(height: 10),
-
-          // Maelezo kwa mtumiaji
           const Text(
-            "Tumetuma kodi ya siri ya tarakimu 6 kwenye anwani yako ya email. Tafadhali ziingize hapa chini ili kuthibitisha.",
+            "Tafadhali kagua email yako kwa ajili ya link ya kubadilisha password.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -357,53 +345,6 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
             ),
           ),
           const SizedBox(height: 28),
-
-          // Vyumba 6 vya Code
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: List.generate(6, (index) {
-              return SizedBox(
-                width: 45,
-                height: 55,
-                child: TextField(
-                  controller: _codeControllers[index],
-                  focusNode: _focusNodes[index],
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  maxLength: 1,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: InputDecoration(
-                    counterText: "",
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey.shade300, width: 1.5),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
-                    ),
-                    fillColor: Colors.grey.shade50,
-                    filled: true,
-                  ),
-                  onChanged: (value) {
-                    if (value.isNotEmpty && index < 5) {
-                      _focusNodes[index + 1].requestFocus();
-                    } else if (value.isEmpty && index > 0) {
-                      _focusNodes[index - 1].requestFocus();
-                    }
-                  },
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 30),
-
-          // Confirm Button — gradient CTA
           SizedBox(
             width: double.infinity,
             height: 56,
@@ -422,7 +363,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
                 ],
               ),
               child: ElevatedButton(
-                onPressed: _onConfirmPressed,
+                onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
@@ -432,7 +373,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
                   ),
                 ),
                 child: const Text(
-                  "Confirm Code",
+                  "Sawa",
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

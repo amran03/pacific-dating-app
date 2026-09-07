@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 
 /// Kifurushi kimoja cha Coins - 1 Coin = 100 TSH (kiwango cha ubadilishaji
@@ -26,14 +25,14 @@ const List<_CoinPackage> _kCoinPackages = [
 /// Skrini ya kununua Coins. 1 Coin = 100 TSH.
 ///
 /// MUHIMU (soma kabla ya ku-deploy kibiashara): Skrini hii kwa sasa
-/// inaunganisha moja kwa moja na Firestore kuongeza coins BILA malipo
+/// inaunganisha moja kwa moja na Supabase kuongeza coins BILA malipo
 /// halisi ya pesa - ni MODE YA MAJARIBIO ili uweze kujaribu mtiririko
 /// mzima wa app yako (coins zikitumika kwa gifts n.k.) bila kusubiri
 /// malipo halisi kuunganishwa.
 ///
 /// Kuunganisha malipo halisi (M-Pesa, Tigo Pesa, Airtel Money, au Card
 /// kupitia Stripe/Flutterwave/Selcom) kunahitaji: (1) akaunti ya
-/// mtoa-huduma wa malipo, (2) Cloud Function ya kuthibitisha malipo
+/// mtoa-huduma wa malipo, (2) Edge Function ya kuthibitisha malipo
 /// upande wa server kabla ya kuongeza coins (ili mtu asiweze kudanganya
 /// app kwa kuruka malipo). Hilo ni hatua inayofuata - niambie ukiwa
 /// tayari kuchagua mtoa-huduma wa malipo, nitakusaidia kuiunganisha.
@@ -62,39 +61,37 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
   Future<void> _purchasePackage(int index, _CoinPackage package) async {
     if (_processingIndex != null) return;
 
-    final user = FirebaseAuth.instance.currentUser;
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
     if (user == null) return;
 
     setState(() => _processingIndex = index);
 
     try {
-      final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      // Fetch current coins
+      final userResponse = await client.from('users').select('coins').eq('uid', user.id).single();
+      final int currentCoins = (userResponse['coins'] ?? 0) as int;
 
-      // TODO: Hapa ndipo malipo halisi (M-Pesa/Tigo Pesa/Airtel/Card)
-      // yatathibitishwa KWANZA (kupitia Cloud Function) kabla ya
-      // kuongeza coins. Kwa sasa (mode ya majaribio) tunaongeza moja
-      // kwa moja.
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final snapshot = await transaction.get(userRef);
-        final int currentCoins = (snapshot.data()?['coins'] ?? 0) as int;
-        transaction.update(userRef, {'coins': currentCoins + package.coins});
-      });
+      // Update coins
+      await client.from('users').update({
+        'coins': currentCoins + package.coins,
+      }).eq('uid', user.id);
 
       // Rekodi ununuzi kwa historia + arifa (NotificationScreen inaisoma hii)
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'toUid': user.uid,
+      await client.from('notifications').insert({
+        'to_uid': user.id,
         'type': 'coins',
         'title': 'Coins Zimeongezwa! 🪙',
         'description': 'Umefanikiwa kununua ${package.coins} Coins.',
-        'createdAt': FieldValue.serverTimestamp(),
+        'created_at': DateTime.now().toIso8601String(),
         'read': false,
       });
 
-      await FirebaseFirestore.instance.collection('coin_purchases').add({
-        'uid': user.uid,
+      await client.from('coin_purchases').insert({
+        'uid': user.id,
         'coins': package.coins,
-        'priceTsh': package.priceTsh,
-        'purchasedAt': FieldValue.serverTimestamp(),
+        'price_tsh': package.priceTsh,
+        'purchased_at': DateTime.now().toIso8601String(),
         'status': 'test_mode', // itabadilika kuwa 'paid' baada ya malipo halisi
       });
 
@@ -119,7 +116,8 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final String myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final client = Supabase.instance.client;
+    final String myUid = client.auth.currentUser?.id ?? '';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -157,11 +155,11 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                 ),
               ],
             ),
-            child: StreamBuilder<DocumentSnapshot>(
-              stream: FirebaseFirestore.instance.collection('users').doc(myUid).snapshots(),
+            child: StreamBuilder<List<Map<String, dynamic>>>(
+              stream: client.from('users').stream(primaryKey: ['uid']).eq('uid', myUid),
               builder: (context, snapshot) {
-                final int coins = snapshot.hasData && snapshot.data!.exists
-                    ? ((snapshot.data!.data() as Map<String, dynamic>?)?['coins'] ?? 0) as int
+                final int coins = snapshot.hasData && snapshot.data!.isNotEmpty
+                    ? (snapshot.data!.first['coins'] ?? 0) as int
                     : 0;
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

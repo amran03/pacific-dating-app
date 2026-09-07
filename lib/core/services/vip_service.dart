@@ -1,12 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class VIPService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final _client = Supabase.instance.client;
 
-  String get _myUid => FirebaseAuth.instance.currentUser!.uid;
+  String get _myUid => _client.auth.currentUser!.id;
 
-  /// Definiton of VIP Tiers
   static const Map<String, Map<String, dynamic>> tiers = {
     'bronze': {
       'name': 'Bronze Ring',
@@ -28,52 +26,44 @@ class VIPService {
     },
   };
 
-  /// Check if user is eligible to buy a specific tier
   Future<bool> isEligible(String tier) async {
-    final doc = await _db.collection('users').doc(_myUid).get();
-    if (!doc.exists) return false;
+    final response = await _client.from('users').select('coins').eq('uid', _myUid).maybeSingle();
+    if (response == null) return false;
 
-    final int currentCoins = doc.data()?['coins'] ?? 0;
+    final int currentCoins = response['coins'] ?? 0;
     final int minBalance = tiers[tier]?['minBalance'] ?? 999999;
 
     return currentCoins >= minBalance;
   }
 
-  /// Purchase a VIP badge
   Future<void> purchaseBadge(String tier) async {
-    final userRef = _db.collection('users').doc(_myUid);
     final tierData = tiers[tier];
     if (tierData == null) throw Exception('Invalid tier');
 
     final int cost = tierData['cost'];
+    final int minBalance = tierData['minBalance'];
 
-    await _db.runTransaction((transaction) async {
-      final snap = await transaction.get(userRef);
-      if (!snap.exists) throw Exception('User not found');
+    final response = await _client.from('users').select().eq('uid', _myUid).single();
+    final int currentCoins = response['coins'] ?? 0;
 
-      final int currentCoins = snap.data()?['coins'] ?? 0;
-      final int minBalance = tierData['minBalance'];
+    if (currentCoins < minBalance) {
+      throw Exception('MINIMUM_BALANCE_NOT_MET');
+    }
+    if (currentCoins < cost) {
+      throw Exception('INSUFFICIENT_COINS');
+    }
 
-      if (currentCoins < minBalance) {
-        throw Exception('MINIMUM_BALANCE_NOT_MET');
-      }
-      if (currentCoins < cost) {
-        throw Exception('INSUFFICIENT_COINS');
-      }
+    final int currentTotalSpent = response['total_spent_coins'] ?? 0;
 
-      final int currentTotalSpent = snap.data()?['totalSpentCoins'] ?? 0;
-
-      transaction.update(userRef, {
-        'coins': currentCoins - cost,
-        'badgeTier': tier,
-        'totalSpentCoins': currentTotalSpent + cost,
-      });
-    });
+    await _client.from('users').update({
+      'coins': currentCoins - cost,
+      'badge_tier': tier,
+      'total_spent_coins': currentTotalSpent + cost,
+    }).eq('uid', _myUid);
   }
 
-  /// Get current user's VIP status
   Future<String> getCurrentTier() async {
-    final doc = await _db.collection('users').doc(_myUid).get();
-    return doc.data()?['badgeTier'] ?? 'none';
+    final response = await _client.from('users').select('badge_tier').eq('uid', _myUid).maybeSingle();
+    return response?['badge_tier'] ?? 'none';
   }
 }

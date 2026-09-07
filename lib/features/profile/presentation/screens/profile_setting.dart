@@ -1,10 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../../../core/constants/app_color.dart';
+import '../../../../../core/services/storage_service.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
@@ -98,31 +97,33 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     super.dispose();
   }
 
-  // 1. Kusoma taarifa zilizopo kwenye Firestore
+  // 1. Kusoma taarifa zilizopo kwenye Firestore (Supabase sasa)
   Future<void> _loadUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user != null) {
       try {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (doc.exists && doc.data() != null) {
-          final data = doc.data()!;
-          _nameController.text = data['name'] ?? '';
-          _ageController.text = data['age']?.toString() ?? '';
-          _bioController.text = data['bio'] ?? '';
-          _locationController.text = data['location'] ?? '';
-          _heightController.text = data['heightCm']?.toString() ?? '';
-          _occupationController.text = data['occupation'] ?? '';
-          _photoUrl = data['profileImageUrl'] ?? '';
-          _selectedGender = data['gender'];
-          _interestedGender = data['interestedGender'];
-          _relationshipGoal = data['relationshipGoal'];
-          _education = data['education'];
-          _smokingHabit = data['smokingHabit'];
-          _drinkingHabit = data['drinkingHabit'];
-          _chatUnlockPrice = data['chatUnlockPrice'] ?? 0;
-          if (data['interests'] != null) {
-            _selectedInterests.addAll(List<String>.from(data['interests']));
-          }
+        final data = await Supabase.instance.client
+            .from('users')
+            .select()
+            .eq('uid', user.id)
+            .single();
+            
+        _nameController.text = data['name'] ?? '';
+        _ageController.text = data['age']?.toString() ?? '';
+        _bioController.text = data['bio'] ?? '';
+        _locationController.text = data['location'] ?? '';
+        _heightController.text = data['height_cm']?.toString() ?? '';
+        _occupationController.text = data['occupation'] ?? '';
+        _photoUrl = data['profile_image_url'] ?? '';
+        _selectedGender = data['gender'];
+        _interestedGender = data['interested_gender'];
+        _relationshipGoal = data['relationship_goal'];
+        _education = data['education'];
+        _smokingHabit = data['smoking_habit'];
+        _drinkingHabit = data['drinking_habit'];
+        _chatUnlockPrice = data['chat_unlock_price'] ?? 0;
+        if (data['interests'] != null) {
+          _selectedInterests.addAll(List<String>.from(data['interests']));
         }
       } catch (e) {
         if (mounted) {
@@ -141,7 +142,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
   // Kubadili Picha ya Profile
   Future<void> _changePhoto() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     final ImagePicker picker = ImagePicker();
@@ -151,19 +152,20 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     setState(() => _isUploadingPhoto = true);
 
     try {
-      final ref = FirebaseStorage.instance.ref().child('profile_images').child('${user.uid}.jpg');
-      await ref.putFile(File(picked.path));
-      final String downloadUrl = await ref.getDownloadURL();
+      final storageService = StorageService();
+      final downloadUrl = await storageService.uploadProfileImage(user.id, File(picked.path));
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'profileImageUrl': downloadUrl,
-      }, SetOptions(merge: true));
+      if (downloadUrl != null) {
+        await Supabase.instance.client.from('users').update({
+          'profile_image_url': downloadUrl,
+        }).eq('uid', user.id);
 
-      if (mounted) {
-        setState(() => _photoUrl = downloadUrl);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Picha imebadilishwa! 📸"), backgroundColor: Colors.green),
-        );
+        if (mounted) {
+          setState(() => _photoUrl = downloadUrl);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Picha imebadilishwa! 📸"), backgroundColor: Colors.green),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -174,9 +176,9 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     }
   }
 
-  // 2. Kuhifadhi au kubadilisha taarifa kwenye Firestore
+  // 2. Kuhifadhi au kubadilisha taarifa kwenye Firestore (Supabase sasa)
   Future<void> _saveProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     setState(() {
@@ -184,26 +186,25 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     });
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'uid': user.uid,
+      await Supabase.instance.client.from('users').update({
         'name': _nameController.text.trim(),
-        'nameLower': _nameController.text.trim().toLowerCase(),
+        'name_lower': _nameController.text.trim().toLowerCase(),
         'age': int.tryParse(_ageController.text.trim()) ?? 0,
         'bio': _bioController.text.trim(),
         'location': _locationController.text.trim(),
-        'heightCm': int.tryParse(_heightController.text.trim()),
+        'height_cm': int.tryParse(_heightController.text.trim()),
         'occupation': _occupationController.text.trim(),
         'gender': _selectedGender,
-        'interestedGender': _interestedGender,
-        'relationshipGoal': _relationshipGoal,
+        'interested_gender': _interestedGender,
+        'relationship_goal': _relationshipGoal,
         'education': _education,
-        'smokingHabit': _smokingHabit,
-        'drinkingHabit': _drinkingHabit,
+        'smoking_habit': _smokingHabit,
+        'drinking_habit': _drinkingHabit,
         'interests': _selectedInterests,
-        'chatUnlockPrice': _chatUnlockPrice,
-        'isProfileComplete': true, // Inaiarifu AuthGate kuwa mtumiaji amekamilisha taarifa
-        'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        'chat_unlock_price': _chatUnlockPrice,
+        'is_profile_complete': true, // Inaiarifu AuthGate kuwa mtumiaji amekamilisha taarifa
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('uid', user.id);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

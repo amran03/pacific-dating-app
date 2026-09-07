@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacific_dating_app/core/localization/app_language.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
@@ -11,12 +10,11 @@ class AuthGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to language changes so WelcomeScreen updates when language is changed
     return ListenableBuilder(
       listenable: AppLanguage.instance,
       builder: (context, _) {
-        return StreamBuilder<User?>(
-          stream: FirebaseAuth.instance.authStateChanges(),
+        return StreamBuilder<AuthState>(
+          stream: Supabase.instance.client.auth.onAuthStateChange,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
@@ -28,11 +26,17 @@ class AuthGate extends StatelessWidget {
               );
             }
 
-            if (snapshot.hasData && snapshot.data != null) {
-              final String uid = snapshot.data!.uid;
+            final session = snapshot.data?.session;
 
-              return StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+            if (session != null) {
+              final String uid = session.user.id;
+
+              return FutureBuilder<PostgrestMap?>(
+                future: Supabase.instance.client
+                    .from('users')
+                    .select()
+                    .eq('uid', uid)
+                    .maybeSingle(),
                 builder: (context, userSnapshot) {
                   if (userSnapshot.connectionState == ConnectionState.waiting) {
                     return const Scaffold(
@@ -44,9 +48,9 @@ class AuthGate extends StatelessWidget {
                     );
                   }
 
-                  if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                    final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-                    if (userData != null && userData['isProfileComplete'] == true) {
+                  if (userSnapshot.hasData && userSnapshot.data != null) {
+                    final userData = userSnapshot.data!;
+                    if (userData['is_profile_complete'] == true) {
                       return const MainDashboardScreen();
                     }
                   }

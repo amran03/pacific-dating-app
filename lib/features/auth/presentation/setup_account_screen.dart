@@ -3,11 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
-import 'package:pacific_dating_app/core/services/firestore_service.dart';
+import 'package:pacific_dating_app/core/services/supabase_db_service.dart';
+import 'package:pacific_dating_app/core/services/storage_service.dart';
 import 'package:pacific_dating_app/core/services/validation_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
@@ -63,7 +62,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   String? _fcmToken;
 
   final ImagePicker _picker = ImagePicker();
-  final FirestoreService _firestoreService = FirestoreService();
+  final SupabaseDbService _dbService = SupabaseDbService();
+  final StorageService _storageService = StorageService();
   bool _isSaving = false;
 
   // Dynamic Relationship Goals based on Gender
@@ -243,11 +243,11 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
     setState(() => _isSaving = true);
 
-    // Hatua ya mwisho kabisa: kama bado hakuna akaunti ya Firebase
+    // Hatua ya mwisho kabisa: kama bado hakuna akaunti ya Supabase
     // (mtumiaji hajaweka password bado), mfungulie sasa hivi skrini ya
     // kutengeneza password. SetupAccountScreen inabaki kwenye stack, hivyo
     // taarifa zote za profile alizoshajaza (jina, picha, bio n.k.) hazipotei.
-    User? currentUser = FirebaseAuth.instance.currentUser;
+    User? currentUser = Supabase.instance.client.auth.currentUser;
     if (currentUser == null) {
       final bool? accountCreated = await Navigator.push<bool>(
         context,
@@ -261,7 +261,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         return;
       }
 
-      currentUser = FirebaseAuth.instance.currentUser;
+      currentUser = Supabase.instance.client.auth.currentUser;
       if (currentUser == null) {
         _showSnackBar("Imeshindikana kutengeneza akaunti. Jaribu tena.");
         setState(() => _isSaving = false);
@@ -272,20 +272,14 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     try {
       String? imageUrl;
 
-      // 1. Pandisha picha ya profile kwenye Firebase Storage (ikiwa mtumiaji ameweka moja)
+      // 1. Pandisha picha ya profile kwenye Storage (ikiwa mtumiaji ameweka moja)
       if (_profileImage != null) {
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('profile_images')
-            .child('${currentUser.uid}.jpg');
-
-        await ref.putFile(_profileImage!);
-        imageUrl = await ref.getDownloadURL();
+        imageUrl = await _storageService.uploadProfileImage(currentUser.id, _profileImage!);
       }
 
       // 2. Kusanya taarifa zote za hatua za usajili kuwa UserModel moja
       final UserModel userModel = UserModel(
-        uid: currentUser.uid,
+        uid: currentUser.id,
         name: _nameController.text.trim(),
         age: _calculatedAge,
         birthDate: _selectedBirthDate,
@@ -303,9 +297,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         isProfileComplete: true,
       );
 
-      // 3. Hifadhi Firestore. merge:true inahakikisha 'phoneNumber' na
-      //    'authEmail' zilizowekwa na CreatePasswordScreen hazifutiki.
-      await _firestoreService.saveUserProfile(userModel);
+      // 3. Hifadhi Supabase 'users' table.
+      await _dbService.saveUserProfile(userModel);
 
       if (!mounted) return;
 
@@ -976,25 +969,9 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                     _showSnackBar("Huwezi kuona watu walio karibu nawe bila ruhusa ya Location.");
                   }
                 } else if (title.contains("Notifications")) {
-                  // Firebase Messaging inashughulikia ombi la ruhusa lenyewe
-                  // (Android 13+ POST_NOTIFICATIONS na iOS) - hii ndiyo
-                  // inayohitajika kupokea push notifications baadaye.
-                  NotificationSettings settings =
-                  await FirebaseMessaging.instance.requestPermission();
-
-                  final bool granted = settings.authorizationStatus == AuthorizationStatus.authorized ||
-                      settings.authorizationStatus == AuthorizationStatus.provisional;
-
-                  if (granted) {
-                    try {
-                      _fcmToken = await FirebaseMessaging.instance.getToken();
-                      onChanged(true);
-                    } catch (e) {
-                      _showSnackBar("Imeshindikana kupata Notification token: $e");
-                    }
-                  } else {
-                    _showSnackBar("Hutopokea taarifa za ujumbe na likes bila ruhusa hii.");
-                  }
+                  // Notification support depends on your integration plan.
+                  // For now, we simply enable the toggle.
+                  onChanged(true);
                 }
               } else {
                 onChanged(false);

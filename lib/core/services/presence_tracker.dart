@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'presence_service.dart';
 
@@ -13,10 +13,10 @@ class PresenceTracker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data != null) {
+        if (snapshot.hasData && snapshot.data?.session != null) {
           PresenceService.start();
         } else {
           PresenceService.stop();

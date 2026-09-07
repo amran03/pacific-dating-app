@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/reset_password_screen.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
-// phoneToSyntheticEmail() bado inahitajika hapa kwa ajili ya _login()
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -21,11 +20,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordHidden = true;
   bool _isLoading = false;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Function ya ku-login. Inakubali email YA KAWAIDA au NAMBA YA SIMU -
-  // endapo mtumiaji ataandika namba ya simu (haina '@'), tunaibadilisha
-  // kiotomatiki kuwa ile synthetic email iliyotumika wakati wa signup.
   Future<void> _login() async {
     final String rawInput = _emailController.text.trim();
     final String password = _passwordController.text.trim();
@@ -40,7 +34,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await _auth.signInWithEmailAndPassword(
+      await Supabase.instance.client.auth.signInWithPassword(
         email: email,
         password: password,
       );
@@ -49,22 +43,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       _showMessage("Umeingia kikamilifu!", Colors.green);
 
-      // Tumetumia MainDashboardScreen kulingana na jina la faili na class
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const MainDashboardScreen()),
             (route) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      String errorMessage = "Kuna kosa limetokea. Jaribu tena.";
-      if (e.code == 'user-not-found') {
-        errorMessage = "Akaunti yenye email hii haijapatikana.";
-      } else if (e.code == 'wrong-password') {
-        errorMessage = "Password uliyoingiza si sahihi.";
-      } else if (e.code == 'invalid-email') {
-        errorMessage = "Anwani ya email si sahihi.";
-      }
-      _showMessage(errorMessage, Colors.redAccent);
+    } on AuthException catch (e) {
+      _showMessage(e.message, Colors.redAccent);
     } catch (e) {
       _showMessage("Kosa: ${e.toString()}", Colors.redAccent);
     } finally {

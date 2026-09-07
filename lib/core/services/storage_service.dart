@@ -1,24 +1,46 @@
 import 'dart:io';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 class StorageService {
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  final _client = Supabase.instance.client;
 
-  // Kazi ya kupakia picha na kurudisha Download URL yake
   Future<String?> uploadProfileImage(String uid, File imageFile) async {
     try {
-      // Tengeneza njia ya kipekee ya faili kwenye Storage (mfano: profile_images/uid.jpg)
-      Reference ref = _storage.ref().child('profile_images').child('$uid.jpg');
+      final fileName = '$uid.jpg';
+      final path = 'profile_images/$fileName';
 
-      // Pakia faili
-      UploadTask uploadTask = ref.putFile(imageFile);
-      TaskSnapshot snapshot = await uploadTask;
+      await _client.storage.from('avatars').upload(
+            path,
+            imageFile,
+            fileOptions: const FileOptions(upsert: true),
+          );
 
-      // Pata link ya kupakua (Download URL) ili tuweze kuihifadhi Firestore
-      String downloadUrl = await snapshot.ref.getDownloadURL();
+      final String downloadUrl =
+          _client.storage.from('avatars').getPublicUrl(path);
       return downloadUrl;
     } catch (e) {
-      print("Hitilafu wakati wa kupakia picha: $e");
+      debugPrint("Hitilafu wakati wa kupakia picha: $e");
+      return null;
+    }
+  }
+
+  Future<String?> uploadChatMedia(String chatId, File file, String extension) async {
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final path = '$chatId/$fileName';
+
+      await _client.storage.from('chat_media').upload(
+            path,
+            file,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
+      final String downloadUrl =
+          _client.storage.from('chat_media').getPublicUrl(path);
+      return downloadUrl;
+    } catch (e) {
+      debugPrint("Error uploading chat media: $e");
       return null;
     }
   }

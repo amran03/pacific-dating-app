@@ -1,8 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
@@ -39,32 +37,6 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _listenForForegroundNotifications();
-  }
-
-  // Ujumbe/notification zinapofika WAKATI app iko wazi (foreground),
-  // FCM haionyeshi 'system tray' banner kiotomatiki - lazima tuishughulikie
-  // wenyewe. Hii inaonyesha SnackBar ndogo juu ya tab yoyote uliyo nayo.
-  //
-  // MUHIMU: Hii inashughulikia ujumbe unapofika app IKIWA WAZI TU. Kupokea
-  // notification wakati app imefungwa kabisa (background/killed) kunahitaji
-  // Cloud Function upande wa server (Firebase Blaze plan) inayotuma push
-  // kupitia FCM - hilo ni hatua ya Phase inayofuata kama utahitaji.
-  void _listenForForegroundNotifications() {
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      if (!mounted) return;
-      final String title = message.notification?.title ?? 'Taarifa Mpya';
-      final String body = message.notification?.body ?? '';
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(body.isNotEmpty ? "$title: $body" : title),
-          backgroundColor: AppColors.primary,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    });
   }
 
   @override
@@ -115,7 +87,7 @@ class NotificationScreen extends StatelessWidget {
   const NotificationScreen({super.key});
 
   // Kila 'type' ina icon na rangi yake - inatumika kupamba arifa halisi
-  // zinazotoka Firestore (badala ya kuwa hardcoded).
+  // zinazotoka Supabase (badala ya kuwa hardcoded).
   static const Map<String, Map<String, dynamic>> _typeStyles = {
     'gift': {'icon': Icons.card_giftcard_rounded, 'color': Colors.pink},
     'coins': {'icon': Icons.monetization_on_rounded, 'color': Colors.amber},
@@ -123,9 +95,15 @@ class NotificationScreen extends StatelessWidget {
     'message': {'icon': Icons.chat_bubble_rounded, 'color': Colors.blue},
   };
 
-  String _formatTimeAgo(Timestamp? ts) {
+  String _formatTimeAgo(dynamic ts) {
     if (ts == null) return '';
-    final DateTime dt = ts.toDate();
+    DateTime? dt;
+    if (ts is String) {
+      dt = DateTime.tryParse(ts);
+    } else if (ts is DateTime) {
+      dt = ts;
+    }
+    if (dt == null) return '';
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 1) return 'Sasa hivi';
     if (diff.inMinutes < 60) return 'Dk ${diff.inMinutes} zilizopita';
@@ -136,7 +114,7 @@ class NotificationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final String myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -156,21 +134,19 @@ class NotificationScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('notifications')
-            .where('toUid', isEqualTo: myUid)
-            .orderBy('createdAt', descending: true)
-            .limit(50)
-            .snapshots(),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: Supabase.instance.client
+            .from('notifications')
+            .stream(primaryKey: ['id'])
+            .eq('to_uid', myUid)
+            .order('created_at', ascending: false)
+            .limit(50),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           }
 
           if (snapshot.hasError) {
-            // Mara nyingi hii ni Firestore Composite Index bado
-            // haijajengwa - angalia debug console kwa LINK ya kuunda.
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
@@ -183,7 +159,7 @@ class NotificationScreen extends StatelessWidget {
             );
           }
 
-          final docs = snapshot.data?.docs ?? [];
+          final docs = snapshot.data ?? [];
 
           if (docs.isEmpty) {
             return Center(
@@ -212,7 +188,7 @@ class NotificationScreen extends StatelessWidget {
             itemCount: docs.length,
             separatorBuilder: (context, index) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
+              final data = docs[index];
               final String type = data['type'] ?? 'coins';
               final style = _typeStyles[type] ?? _typeStyles['coins']!;
               final Color themeColor = style['color'];
@@ -260,7 +236,7 @@ class NotificationScreen extends StatelessWidget {
                                 ),
                               ),
                               Text(
-                                _formatTimeAgo(data['createdAt'] as Timestamp?),
+                                _formatTimeAgo(data['created_at']),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.grey.shade500,
@@ -711,7 +687,20 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       ),
                       child: Column(
                         children: [
-                          Text(gift.emoji, style: const TextStyle(fontSize: 90)),
+                          gift.imageUrl != null
+                              ? Image.network(
+                                  gift.imageUrl!,
+                                  width: 100,
+                                  height: 100,
+                                  errorBuilder: (_, __, ___) => Text(
+                                    gift.emoji ?? '🎁',
+                                    style: const TextStyle(fontSize: 90),
+                                  ),
+                                )
+                              : Text(
+                                  gift.emoji ?? '🎁',
+                                  style: const TextStyle(fontSize: 90),
+                                ),
                           const SizedBox(height: 12),
                           Text(
                             "Zawadi Imetumwa!",

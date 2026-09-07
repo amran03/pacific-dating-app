@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_color.dart';
 import '../../../../features/profile/presentation/screens/terms_conditions_screen.dart';
 import '../../../../features/profile/presentation/screens/privacy_policy_screen.dart';
@@ -29,13 +28,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  // Inabadilisha namba ya simu kuwa "email" ya ndani ili tuweze kutumia
-  // Firebase Email/Password Auth bila kuhitaji mtumiaji kuwa na email halisi.
-  // Mfano: 0712345678  ->  255712345678@pacificapp.com
   String _phoneToInternalEmail(String rawPhone) {
     String digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-
-    // Kama mtumiaji ameanza na 0 (mfano 0712345678), tunabadilisha kuwa 255...
     if (digits.startsWith('0')) {
       digits = '255${digits.substring(1)}';
     }
@@ -53,27 +47,22 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final String internalEmail = _phoneToInternalEmail(phone);
 
     try {
-      // 1. Tengeneza akaunti ya Firebase Auth (bila SMS/email verification yoyote)
-      final UserCredential credential =
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      final AuthResponse response = await Supabase.instance.client.auth.signUp(
         email: internalEmail,
         password: password,
+        data: {'full_name': name},
       );
 
-      final String uid = credential.user!.uid;
+      final user = response.user;
+      if (user == null) throw Exception("User creation failed");
 
-      // 2. Hifadhi taarifa za mtumiaji moja kwa moja kwenye Firestore
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'uid': uid,
-        'fullName': name,
-        'phoneNumber': phone,
-        'isProfileComplete': false,
-        'createdAt': FieldValue.serverTimestamp(),
+      await Supabase.instance.client.from('users').upsert({
+        'uid': user.id,
+        'name': name,
+        'phone_number': phone,
+        'is_profile_complete': false,
+        'updated_at': DateTime.now().toIso8601String(),
       });
-
-      // Hakuna haja ya Navigator hapa — AuthGate (StreamBuilder ya
-      // authStateChanges) itagundua mtumiaji ameshaingia na kubadili
-      // skrini kiotomatiki.
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -82,24 +71,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
           backgroundColor: Colors.green,
         ),
       );
-    } on FirebaseAuthException catch (e) {
-      String message;
-      switch (e.code) {
-        case 'email-already-in-use':
-          message = "Namba hii ya simu tayari imesajiliwa. Jaribu Log In.";
-          break;
-        case 'weak-password':
-          message = "Password ni dhaifu mno. Weka angalau herufi 6.";
-          break;
-        case 'invalid-email':
-          message = "Namba ya simu uliyoweka si sahihi.";
-          break;
-        default:
-          message = "Imeshindikana: ${e.message}";
-      }
+    } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
       );
     } catch (e) {
       if (!mounted) return;
@@ -128,7 +103,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
               children: [
                 const SizedBox(height: 8),
 
-                // BRAND HEADER — gradient heart yenye glow (entrance)
                 Center(
                   child: TweenAnimationBuilder<double>(
                     tween: Tween(begin: 0.0, end: 1.0),
@@ -184,7 +158,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Full Name — filled, rounded, focus glow
                 TextFormField(
                   controller: _nameController,
                   decoration: InputDecoration(
@@ -221,7 +194,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Phone Number (inachukua nafasi ya Email)
                 TextFormField(
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
@@ -265,7 +237,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Password
                 TextFormField(
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
@@ -316,7 +287,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 28),
 
-                // Sign Up Button — gradient CTA
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -366,7 +336,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Terms & Privacy agreement
                 Center(
                   child: Text.rich(
                     TextSpan(
@@ -429,7 +398,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Login Option
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [

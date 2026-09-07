@@ -2,12 +2,11 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_color.dart';
+import '../../../core/services/storage_service.dart';
 import '../data/user_model.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
 
@@ -32,7 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   AppLanguage get _lang => AppLanguage.instance;
 
   Future<void> _changeProfilePhoto() async {
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     final ImagePicker picker = ImagePicker();
@@ -42,22 +41,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isUploadingPhoto = true);
 
     try {
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('profile_images')
-          .child('${user.uid}.jpg');
+      final storageService = StorageService();
+      final downloadUrl = await storageService.uploadProfileImage(user.id, File(picked.path));
 
-      await ref.putFile(File(picked.path));
-      final String downloadUrl = await ref.getDownloadURL();
+      if (downloadUrl != null) {
+        await Supabase.instance.client.from('users').update({
+          'profile_image_url': downloadUrl,
+        }).eq('uid', user.id);
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-        'profileImageUrl': downloadUrl,
-      }, SetOptions(merge: true));
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Picha ya profile imebadilishwa!"), backgroundColor: Colors.green),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Picha ya profile imebadilishwa!"), backgroundColor: Colors.green),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -87,12 +83,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () async {
               final navigator = Navigator.of(context);
               navigator.pop(); // funga dialog
-              await FirebaseAuth.instance.signOut();
+              await Supabase.instance.client.auth.signOut();
               // Tunaelekeza moja kwa moja kwenda WelcomeScreen na kufuta
-              // stack YOTE ya nyuma - hii inahakikisha logout inafanya
-              // kazi hata kama AuthGate haipo tena kwenye navigation
-              // stack (mfano baada ya PacificLaunchScreen kuondoa route
-              // za nyuma zote kwa pushAndRemoveUntil wakati wa usajili).
+              // stack YOTE ya nyuma
               navigator.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const WelcomeScreen()),
                     (route) => false,
@@ -132,26 +125,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _handleDeleteAccount(BuildContext context) async {
     final navigator = Navigator.of(context);
     navigator.pop(); // funga dialog ya onyo
-    final user = FirebaseAuth.instance.currentUser;
+    final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
-      await user.delete();
-      // Elekeza moja kwa moja WelcomeScreen - AuthGate huenda haipo tena
-      // kwenye stack (angalia maelezo kwenye Logout hapo juu).
+      // Futa taarifa za profile kwanza
+      await Supabase.instance.client.from('users').delete().eq('uid', user.id);
+      
+      // Supabase Auth deletion mara nyingi hufanywa upande wa server.
+      // Hapa tutamsign-out mtumiaji na kumrudisha welcome screen.
+      await Supabase.instance.client.auth.signOut();
+      
       navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const WelcomeScreen()),
             (route) => false,
       );
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        if (context.mounted) _showReauthDialog(context, user);
-      } else if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Imeshindikana kufuta akaunti: ${e.message}")),
-        );
-      }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Kosa: $e")));
@@ -159,79 +147,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // Kwa usalama, Firebase wakati mwingine inahitaji uthibitishe upya password
-  // yako kabla ya kufuta akaunti (hasa kama umeshalogin muda mrefu uliopita).
-  void _showReauthDialog(BuildContext context, User user) {
-    final TextEditingController passwordController = TextEditingController();
-    bool isSubmitting = false;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("Thibitisha Password", style: TextStyle(fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text("Kwa usalama, weka password yako tena kabla ya kufuta akaunti."),
-              const SizedBox(height: 14),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(hintText: "Password", border: OutlineInputBorder()),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Ghairi", style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: isSubmitting
-                  ? null
-                  : () async {
-                if (user.email == null) return;
-                setDialogState(() => isSubmitting = true);
-                try {
-                  final credential = EmailAuthProvider.credential(
-                    email: user.email!,
-                    password: passwordController.text.trim(),
-                  );
-                  await user.reauthenticateWithCredential(credential);
-                  await FirebaseFirestore.instance.collection('users').doc(user.uid).delete();
-                  await user.delete();
-                  if (context.mounted) {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-                          (route) => false,
-                    );
-                  }
-                } catch (e) {
-                  setDialogState(() => isSubmitting = false);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Password si sahihi. Jaribu tena.")),
-                    );
-                  }
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red, elevation: 0),
-              child: isSubmitting
-                  ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-              )
-                  : const Text("Thibitisha na Futa", style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -266,17 +181,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
 
           // Main Content
-          StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseAuth.instance.currentUser == null
-                ? null
-                : FirebaseFirestore.instance
-                .collection('users')
-                .doc(FirebaseAuth.instance.currentUser!.uid)
-                .snapshots(),
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: Supabase.instance.client.auth.currentUser == null
+                ? const Stream.empty()
+                : Supabase.instance.client
+                .from('users')
+                .stream(primaryKey: ['uid'])
+                .eq('uid', Supabase.instance.client.auth.currentUser!.id)
+                .limit(1),
             builder: (context, snapshot) {
               UserModel? me;
-              if (snapshot.hasData && snapshot.data!.exists) {
-                me = UserModel.fromMap(snapshot.data!.data() as Map<String, dynamic>);
+              if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                me = UserModel.fromMap(snapshot.data!.first);
               }
 
               final String displayName = me != null ? "${me.name}, ${me.age}" : "Mtumiaji";

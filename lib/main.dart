@@ -1,11 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-// FILE ya Firebase options (inazohitajika Firebase.initializeApp ili
-// ishiriki na project yako). Ninawila values ya project yako kwenye
-// lib/firebase_options.dart.
-import 'firebase_options.dart';
 
 // Hakikisha njia hii ya import inaendana na ulipoweka faili lako la WelcomeScreen
 import 'core/localization/app_language.dart';
@@ -26,17 +20,6 @@ Future<void> main() async {
     await SupabaseService.instance.initialize();
   } catch (e) {
     debugPrint('Supabase initialization failed: $e');
-  }
-
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    // Backend bado haipatikani (mfano mtandao au Firebase options haziweke) —
-    // app inafunguka hata hivyo; Firebase-dependent screens zitaonyesha
-    // hali zao za kusubiri/error badala ya crash.
-    debugPrint('Firebase initialization failed: $e');
   }
 
   runApp(const MyApp());

@@ -1,19 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 
 /// Hubadilisha namba ya simu kuwa "email ya kubuni" (synthetic email).
-/// Firebase Auth haina njia ya moja kwa moja ya phone+password, hivyo
-/// hii ndiyo njia salama ya kuruhusu mtumiaji ku-login baadaye kwa
-/// namba yake ya simu pamoja na password aliyochagua.
-///
-/// MUHIMU: function hii inatumika sehemu mbili (hapa na login_screen.dart)
-/// - lazima ibaki sawa kabisa sehemu zote mbili, la sivyo login itashindwa.
 String phoneToSyntheticEmail(String phoneNumberOrDigits) {
   String digits = phoneNumberOrDigits.replaceAll(RegExp(r'[^0-9]'), '');
 
-  // Sanifisha: ondoa '0' ya mwanzo, hakikisha ina country code ya Tanzania (255)
   if (digits.startsWith('0')) {
     digits = digits.substring(1);
   }
@@ -24,15 +16,6 @@ String phoneToSyntheticEmail(String phoneNumberOrDigits) {
   return "$digits@pacificdatingapp.com";
 }
 
-/// Skrini hii sasa inaitwa MWISHONI mwa mchakato wa usajili (kabla ya
-/// "Start Swiping" kwenye SetupAccountScreen), sio mwanzoni. Kwa sababu
-/// hiyo, HAITEGEMEI tena currentUser awepo kutoka phone-verification -
-/// badala yake inatengeneza akaunti mpya ya Firebase moja kwa moja.
-///
-/// Skrini hii inatarajiwa kufunguliwa kwa Navigator.push (sio
-/// pushAndRemoveUntil) ili baada ya kufanikiwa iweze kufanya
-/// Navigator.pop(context, true) kurudi kwenye SetupAccountScreen na
-/// kuendelea kuhifadhi profile kamili.
 class CreatePasswordScreen extends StatefulWidget {
   final String phoneNumber;
 
@@ -60,44 +43,33 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
     final String password = _passwordController.text.trim();
 
     try {
-      // 1. Tengeneza akaunti mpya ya Firebase Auth moja kwa moja, ikitumia
-      //    email ya kubuni (iliyotokana na namba ya simu) + password
-      //    aliyochagua mtumiaji. Hakuna phone verification inayohitajika.
-      final UserCredential credential =
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // 1. Tengeneza akaunti mpya ya Supabase Auth
+      final AuthResponse response = await Supabase.instance.client.auth.signUp(
         email: syntheticEmail,
         password: password,
       );
 
-      final String uid = credential.user!.uid;
+      final user = response.user;
+      if (user == null) throw Exception("User creation failed");
 
-      // 2. Hifadhi taarifa za awali kwenye Firestore. isProfileComplete
-      //    inabaki false hadi SetupAccountScreen ikamilishe kuhifadhi
-      //    profile kamili (jina, umri, picha n.k.) mara baada ya hapa.
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+      final String uid = user.id;
+
+      // 2. Hifadhi taarifa za awali kwenye Supabase 'users' table
+      await Supabase.instance.client.from('users').upsert({
         'uid': uid,
-        'phoneNumber': widget.phoneNumber,
-        'authEmail': syntheticEmail,
-        'coins': 100, // Zawadi ya kukaribisha kwa mtumiaji mpya
-        'isProfileComplete': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+        'phone_number': widget.phoneNumber,
+        'auth_email': syntheticEmail,
+        'coins': 100,
+        'is_profile_complete': false,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
 
       if (!mounted) return;
 
       _showMessage("Password imewekwa kikamilifu! 🎉", Colors.green);
-
-      // Rudi kwenye SetupAccountScreen (uliyemtoka) ukiwa na matokeo
-      // 'true' ili aendelee kuhifadhi profile na kuelekea Dashboard.
       Navigator.pop(context, true);
-    } on FirebaseAuthException catch (e) {
-      String message = "Imeshindikana kuweka password.";
-      if (e.code == 'email-already-in-use') {
-        message = "Namba hii ya simu tayari ina akaunti. Tafadhali tumia Log In.";
-      } else if (e.code == 'weak-password') {
-        message = "Password ni dhaifu sana, chagua nyingine.";
-      }
-      _showMessage("$message (${e.code})", Colors.redAccent);
+    } on AuthException catch (e) {
+      _showMessage(e.message, Colors.redAccent);
     } catch (e) {
       _showMessage("Kosa: ${e.toString()}", Colors.redAccent);
     } finally {

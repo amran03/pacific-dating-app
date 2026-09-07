@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 class GiftModel {
   final String id;
   final String name;
-  final String emoji;
+  final String? emoji;
+  final String? imageUrl;
   final int coinPrice;
   final String tier;
   final Color glowColor;
@@ -15,7 +16,8 @@ class GiftModel {
   const GiftModel({
     required this.id,
     required this.name,
-    required this.emoji,
+    this.emoji,
+    this.imageUrl,
     required this.coinPrice,
     required this.glowColor,
     this.tier = 'basic',
@@ -23,6 +25,18 @@ class GiftModel {
 
   bool get isLuxury => tier == 'luxury';
   bool get isPremium => tier == 'premium';
+
+  factory GiftModel.fromMap(Map<String, dynamic> map) {
+    return GiftModel(
+      id: map['id'] ?? '',
+      name: map['name'] ?? '',
+      emoji: map['emoji'],
+      imageUrl: map['image_url'],
+      coinPrice: map['coin_price'] ?? 0,
+      tier: map['tier'] ?? 'basic',
+      glowColor: Color(int.parse(map['glow_color'] ?? '0xFFFF4B6E')),
+    );
+  }
 }
 
 // Zawadi za Pacific — zimepangwa kwa tiers ili tray ionekane impressive:

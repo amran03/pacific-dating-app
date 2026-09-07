@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
@@ -134,14 +134,18 @@ class PublicProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF3F4F8),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: Supabase.instance.client
+            .from('users')
+            .stream(primaryKey: ['uid'])
+            .eq('uid', uid)
+            .limit(1),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppColors.primary));
           }
 
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return SafeArea(
               child: Column(
                 children: [
@@ -160,7 +164,7 @@ class PublicProfileScreen extends StatelessWidget {
             );
           }
 
-          final user = UserModel.fromMap(snapshot.data!.data() as Map<String, dynamic>);
+          final user = UserModel.fromMap(snapshot.data!.first);
           final String imageUrl = (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
               ? user.profileImageUrl!
               : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=800';

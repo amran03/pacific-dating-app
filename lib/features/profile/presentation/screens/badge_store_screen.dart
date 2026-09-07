@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:pacific_dating_app/core/services/vip_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class BadgeStoreScreen extends StatefulWidget {
   const BadgeStoreScreen({super.key});
@@ -32,7 +31,8 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
     });
 
     try {
-      final currentUser = FirebaseAuth.instance.currentUser;
+      final client = Supabase.instance.client;
+      final currentUser = client.auth.currentUser;
 
       if (currentUser == null) {
         if (!mounted) return;
@@ -44,17 +44,16 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
         return;
       }
 
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .get();
+      final data = await client
+          .from('users')
+          .select()
+          .eq('uid', currentUser.id)
+          .single();
 
       if (!mounted) return;
 
-      final data = userDoc.data();
-
-      final dynamic coinsValue = data?['coins'];
-      final dynamic tierValue = data?['badgeTier'];
+      final dynamic coinsValue = data['coins'];
+      final dynamic tierValue = data['badge_tier'];
 
       final int coins = coinsValue is int
           ? coinsValue

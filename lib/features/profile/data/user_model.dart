@@ -1,13 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-/// Muundo wa taarifa za mtumiaji mmoja mmoja (per-user), sio static/shared.
-/// Fields zote hapa zinaendana na kile kinachokusanywa kwenye
-/// SetupAccountScreen (jina, umri, jinsia, bio, picha, n.k.)
+/// Muundo wa taarifa za mtumiaji mmoja mmoja (per-user).
 class UserModel {
   final String uid;
   final String name;
-  // Toleo la jina lililowekwa herufi ndogo zote - hutumika kwa ajili ya
-  // utafutaji (search) kwenye Firestore bila kujali herufi kubwa/ndogo.
   String get nameLower => name.toLowerCase();
   final int age;
   final DateTime? birthDate;
@@ -23,19 +17,14 @@ class UserModel {
   final double? longitude;
   final String? fcmToken;
   final int coins;
-  // Badge Tier for VIP status: 'none', 'bronze', 'gold', 'diamond'
   final String badgeTier;
-  // Total coins spent by the user (for rewarding high spenders)
   final int totalSpentCoins;
-  // Fields za ziada zinazofanana na dating apps nyingine
   final int? heightCm;
   final String? education;
   final String? occupation;
   final List<String> interests;
   final String? smokingHabit;
   final String? drinkingHabit;
-  // Bei (Coins) ambayo MTU MWINGINE anatakiwa alipe kufungua chat na
-  // mtumiaji huyu (0 = bure kabisa). Mmiliki wa profile ndiye anayeweka.
   final int chatUnlockPrice;
   final bool locationEnabled;
   final bool notificationsEnabled;
@@ -72,78 +61,74 @@ class UserModel {
     this.isProfileComplete = false,
   });
 
-  /// Inabadilisha object hii kuwa Map ili iweze kuhifadhiwa Firestore
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,
       'name': name,
-      'nameLower': nameLower,
+      'name_lower': nameLower,
       'age': age,
-      'birthDate': birthDate != null ? Timestamp.fromDate(birthDate!) : null,
+      'birth_date': birthDate?.toIso8601String(),
       'gender': gender,
       'bio': bio,
-      'interestedGender': interestedGender,
-      'relationshipGoal': relationshipGoal,
-      'profileImageUrl': profileImageUrl,
-      'phoneNumber': phoneNumber,
-      'authEmail': authEmail,
+      'interested_gender': interestedGender,
+      'relationship_goal': relationshipGoal,
+      'profile_image_url': profileImageUrl,
+      'phone_number': phoneNumber,
+      'auth_email': authEmail,
       'location': location,
       'latitude': latitude,
       'longitude': longitude,
-      'fcmToken': fcmToken,
+      'fcm_token': fcmToken,
       'coins': coins,
-      'badgeTier': badgeTier,
-      'totalSpentCoins': totalSpentCoins,
-      'heightCm': heightCm,
+      'badge_tier': badgeTier,
+      'total_spent_coins': totalSpentCoins,
+      'height_cm': heightCm,
       'education': education,
       'occupation': occupation,
       'interests': interests,
-      'smokingHabit': smokingHabit,
-      'drinkingHabit': drinkingHabit,
-      'chatUnlockPrice': chatUnlockPrice,
-      'locationEnabled': locationEnabled,
-      'notificationsEnabled': notificationsEnabled,
-      'isProfileComplete': isProfileComplete,
-      'updatedAt': FieldValue.serverTimestamp(),
+      'smoking_habit': smokingHabit,
+      'drinking_habit': drinkingHabit,
+      'chat_unlock_price': chatUnlockPrice,
+      'location_enabled': locationEnabled,
+      'notifications_enabled': notificationsEnabled,
+      'is_profile_complete': isProfileComplete,
+      'updated_at': DateTime.now().toIso8601String(),
     };
   }
 
-  /// Inasoma Map kutoka Firestore na kuitengeneza kuwa UserModel
   factory UserModel.fromMap(Map<String, dynamic> map) {
     return UserModel(
       uid: map['uid'] ?? '',
       name: map['name'] ?? '',
       age: map['age'] ?? 0,
-      birthDate: map['birthDate'] != null ? (map['birthDate'] as Timestamp).toDate() : null,
+      birthDate: map['birth_date'] != null ? DateTime.parse(map['birth_date']) : null,
       gender: map['gender'],
       bio: map['bio'],
-      interestedGender: map['interestedGender'],
-      relationshipGoal: map['relationshipGoal'],
-      profileImageUrl: map['profileImageUrl'],
-      phoneNumber: map['phoneNumber'],
-      authEmail: map['authEmail'],
+      interestedGender: map['interested_gender'],
+      relationshipGoal: map['relationship_goal'],
+      profileImageUrl: map['profile_image_url'],
+      phoneNumber: map['phone_number'],
+      authEmail: map['auth_email'],
       location: map['location'],
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
-      fcmToken: map['fcmToken'],
+      fcmToken: map['fcm_token'],
       coins: map['coins'] ?? 0,
-      badgeTier: map['badgeTier'] ?? 'none',
-      totalSpentCoins: map['totalSpentCoins'] ?? 0,
-      heightCm: map['heightCm'],
+      badgeTier: map['badge_tier'] ?? 'none',
+      totalSpentCoins: map['total_spent_coins'] ?? 0,
+      heightCm: map['height_cm'],
       education: map['education'],
       occupation: map['occupation'],
       interests: map['interests'] != null ? List<String>.from(map['interests']) : const [],
-      smokingHabit: map['smokingHabit'],
-      drinkingHabit: map['drinkingHabit'],
-      chatUnlockPrice: map['chatUnlockPrice'] ?? 0,
-      locationEnabled: map['locationEnabled'] ?? false,
-      notificationsEnabled: map['notificationsEnabled'] ?? false,
-      isProfileComplete: map['isProfileComplete'] ?? false,
+      smokingHabit: map['smoking_habit'],
+      drinkingHabit: map['drinking_habit'],
+      chatUnlockPrice: map['chat_unlock_price'] ?? 0,
+      locationEnabled: map['location_enabled'] ?? false,
+      notificationsEnabled: map['notifications_enabled'] ?? false,
+      isProfileComplete: map['is_profile_complete'] ?? false,
     );
   }
 
-  /// Husaidia ku-update fields chache tu bila kupoteza zilizopo (mfano
-  /// unapotaka kubadilisha bio pekee bila kuathiri picha/jina)
   UserModel copyWith({
     String? name,
     int? age,

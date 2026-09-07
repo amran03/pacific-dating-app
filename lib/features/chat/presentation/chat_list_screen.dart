@@ -161,9 +161,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               }
 
               if (snapshot.hasError) {
-                // Mara nyingi hii ni kwa sababu Firestore Composite Index
-                // bado haijajengwa. Angalia debug console - Firebase
-                // hutoa LINK ya moja kwa moja ya kujenga index, bonyeza tu.
+                // Hapa tunaonyesha kosa kama stream imeshindikana kupakua data kutoka Supabase
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24.0),

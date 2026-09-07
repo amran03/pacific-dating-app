@@ -1,61 +1,35 @@
 import 'dart:math';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 
-/// Huduma kuu ya "matchmaking": Discover (kuonyesha watumiaji wapya),
-/// like/pass halisi, kutambua Match (kupendana), na kuunda chat_room
-/// kiotomatiki mtu wawili wanapopendana.
-///
-/// Muundo wa Firestore unaotumika:
-/// - swipes/{myUid}/actions/{targetUid} -> {targetUid, action: 'like'|'pass', createdAt}
-/// - matches/{chatId} -> {users: [uidA, uidB], matchedAt, chatRoomId}
-/// - chat_rooms/{chatId} -> {participants: [uidA, uidB], lastMessage, lastMessageAt}
-///
-/// MUHIMU: streamUsersWhoLikedMe() inahitaji Composite Index kwenye
-/// Firestore Console (Collection Group: actions | Fields: targetUid Asc,
-/// action Asc). Mara ya kwanza utakapoendesha app, kama index haipo,
-/// error ya Firestore itakupa LINK ya moja kwa moja ya kuunda index hiyo
-/// - bonyeza tu link hiyo (inachukua dakika 1-2 kujengwa upande wa Google).
 class MatchmakingService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final _client = Supabase.instance.client;
 
-  String get _myUid => FirebaseAuth.instance.currentUser!.uid;
+  String get _myUid => _client.auth.currentUser!.id;
 
-  /// Chumba/ID ya kipekee kati ya watumiaji wawili - sawa kabisa na jinsi
-  /// IndividualChatScreen inavyotengeneza chatId yake.
   String chatIdFor(String otherUid) {
     final ids = [_myUid, otherUid]..sort();
     return ids.join('_');
   }
 
-  /// Pata profile yangu mwenyewe (jina, coordinates, coins n.k.) - inatumika
-  /// kwa mfano kuhesabu umbali kati yangu na watumiaji wengine.
   Future<UserModel?> fetchMyProfile() async {
-    final doc = await _db.collection('users').doc(_myUid).get();
-    if (!doc.exists || doc.data() == null) return null;
-    return UserModel.fromMap(doc.data()!);
+    final response = await _client
+        .from('users')
+        .select()
+        .eq('uid', _myUid)
+        .maybeSingle();
+    if (response == null) return null;
+    return UserModel.fromMap(response);
   }
 
-  /// Hesabu umbali (km) kati ya coordinates mbili kwa kutumia Haversine
-  /// formula - sahihi vya kutosha kwa "watu walio karibu nawe" feature,
-  /// bila haja ya huduma za nje (Google Distance Matrix n.k.).
-  static double calculateDistanceKm(
-      double lat1,
-      double lon1,
-      double lat2,
-      double lon2,
-      ) {
+  static double calculateDistanceKm(double lat1, double lon1, double lat2, double lon2) {
     const double earthRadiusKm = 6371;
     final double dLat = _degToRad(lat2 - lat1);
     final double dLon = _degToRad(lon2 - lon1);
 
     final double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_degToRad(lat1)) *
-            cos(_degToRad(lat2)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
+        cos(_degToRad(lat1)) * cos(_degToRad(lat2)) * sin(dLon / 2) * sin(dLon / 2);
     final double c = 2 * atan2(sqrt(a), sqrt(1 - a));
 
     return earthRadiusKm * c;
@@ -63,53 +37,44 @@ class MatchmakingService {
 
   static double _degToRad(double deg) => deg * (pi / 180);
 
-  /// Tafuta watumiaji kwa jina (haijalishi herufi kubwa/ndogo). Inatumia
-  /// 'nameLower' field (imewekwa kiotomatiki wakati wa kuhifadhi profile).
-  /// MUHIMU: Hii ni "prefix search" (inalingana na MWANZO wa jina) - njia
-  /// rahisi na ya haraka ya Firestore bila kuhitaji huduma za nje kama
-  /// Algolia. "ami" itapata "Amina" lakini si "Salamini".
   Future<List<UserModel>> searchUsersByName(String query) async {
     final String q = query.trim().toLowerCase();
     if (q.isEmpty) return [];
 
-    final snap = await _db
-        .collection('users')
-        .where('nameLower', isGreaterThanOrEqualTo: q)
-        .where('nameLower', isLessThanOrEqualTo: '$q\uf8ff')
-        .limit(20)
-        .get();
+    final response = await _client
+        .from('users')
+        .select()
+        .ilike('name', '%$q%')
+        .neq('uid', _myUid)
+        .limit(20);
 
-    return snap.docs
-        .where((doc) => doc.id != _myUid)
-        .map((doc) => UserModel.fromMap(doc.data()))
-        .toList();
+    return (response as List).map((data) => UserModel.fromMap(data)).toList();
   }
 
-  /// Pata watumiaji wapya wa kuonyesha kwenye Discover: si mimi mwenyewe,
-  /// na sijawahi kumu-swipe (like wala pass) hapo awali.
-  /// VIP members (Diamond > Gold > Bronze) wanapewa kipaumbele kuonekana kwanza.
   Future<List<UserModel>> fetchDiscoverableUsers({int limit = 15}) async {
-    final swipedSnap = await _db
-        .collection('swipes')
-        .doc(_myUid)
-        .collection('actions')
-        .get();
+    // 1. Get all my swipes
+    final swipedResponse = await _client
+        .from('swipes')
+        .select('target_uid')
+        .eq('from_uid', _myUid);
+    
+    final List<String> excludedUids = (swipedResponse as List)
+        .map((d) => d['target_uid'] as String)
+        .toList();
+    excludedUids.add(_myUid);
 
-    final excludedUids = swipedSnap.docs.map((d) => d.id).toSet()..add(_myUid);
+    // 2. Fetch users not in excluded list
+    final usersResponse = await _client
+        .from('users')
+        .select()
+        .eq('is_profile_complete', true)
+        .not('uid', 'in', excludedUids)
+        .limit(limit * 3);
 
-    // Tunachukua pool kubwa kidogo ili tuweze kupanga VIP kwanza
-    final usersSnap = await _db
-        .collection('users')
-        .where('isProfileComplete', isEqualTo: true)
-        .limit(limit * 5 + excludedUids.length)
-        .get();
-
-    final List<UserModel> candidates = usersSnap.docs
-        .where((doc) => !excludedUids.contains(doc.id))
-        .map((doc) => UserModel.fromMap(doc.data()))
+    final List<UserModel> candidates = (usersResponse as List)
+        .map((data) => UserModel.fromMap(data))
         .toList();
 
-    // Priority map for sorting
     final Map<String, int> tierPriority = {
       'diamond': 3,
       'gold': 2,
@@ -117,7 +82,6 @@ class MatchmakingService {
       'none': 0,
     };
 
-    // Sort: Higher priority first
     candidates.sort((a, b) {
       final pA = tierPriority[a.badgeTier] ?? 0;
       final pB = tierPriority[b.badgeTier] ?? 0;
@@ -127,32 +91,26 @@ class MatchmakingService {
     return candidates.take(limit).toList();
   }
 
-  /// Rekodi like au pass kwa mtumiaji fulani. Inarudisha `true` kama
-  /// pande zote mbili zimependana (Match!), vinginevyo `false`.
   Future<bool> recordSwipe(String targetUid, {required bool isLike}) async {
-    await _db
-        .collection('swipes')
-        .doc(_myUid)
-        .collection('actions')
-        .doc(targetUid)
-        .set({
-      'targetUid': targetUid,
+    await _client.from('swipes').upsert({
+      'from_uid': _myUid,
+      'target_uid': targetUid,
       'action': isLike ? 'like' : 'pass',
-      'createdAt': FieldValue.serverTimestamp(),
+      'created_at': DateTime.now().toIso8601String(),
     });
 
     if (!isLike) return false;
 
-    // Je, huyu naye ameshanipenda mimi tayari? (Mutual Match)
-    final theirAction = await _db
-        .collection('swipes')
-        .doc(targetUid)
-        .collection('actions')
-        .doc(_myUid)
-        .get();
+    // Check if mutual
+    final theirAction = await _client
+        .from('swipes')
+        .select()
+        .eq('from_uid', targetUid)
+        .eq('target_uid', _myUid)
+        .eq('action', 'like')
+        .maybeSingle();
 
-    final bool isMutual =
-        theirAction.exists && theirAction.data()?['action'] == 'like';
+    final bool isMutual = theirAction != null;
 
     if (isMutual) {
       await _createMatch(targetUid);
@@ -164,239 +122,191 @@ class MatchmakingService {
     final String chatId = chatIdFor(otherUid);
     final ids = [_myUid, otherUid]..sort();
 
-    await _db.collection('matches').doc(chatId).set({
-      'users': ids,
-      'matchedAt': FieldValue.serverTimestamp(),
-      'chatRoomId': chatId,
+    await _client.from('matches').upsert({
+      'id': chatId,
+      'user_a': ids[0],
+      'user_b': ids[1],
+      'matched_at': DateTime.now().toIso8601String(),
     });
 
-    // Tengeneza chat_room mara moja, ikiwa TAYARI IMEFUNGULIWA kwa wote
-    // wawili (wamependana = huru kuongea, hakuna malipo kati ya matches).
-    await _db.collection('chat_rooms').doc(chatId).set({
+    await _client.from('chat_rooms').upsert({
+      'id': chatId,
       'participants': ids,
-      'unlockedBy': ids,
-      'lastMessage': '',
-      'lastMessageAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+      'unlocked_by': ids,
+      'last_message': '',
+      'last_message_at': DateTime.now().toIso8601String(),
+    });
 
-    // Arifa kwa pande zote mbili - NotificationScreen inaisoma hii
     final myProfile = await fetchMyProfile();
-    final theirDoc = await _db.collection('users').doc(otherUid).get();
+    final theirProfile = await _client.from('users').select().eq('uid', otherUid).maybeSingle();
     final String myName = myProfile?.name ?? 'Mtumiaji';
-    final String theirName = (theirDoc.data()?['name'] ?? 'Mtumiaji') as String;
+    final String theirName = theirProfile?['name'] ?? 'Mtumiaji';
 
-    final batch = _db.batch();
-    batch.set(_db.collection('notifications').doc(), {
-      'toUid': otherUid,
-      'type': 'match',
-      'title': 'Umepata Match! 🎉',
-      'description': 'Wewe na $myName mmependana!',
-      'createdAt': FieldValue.serverTimestamp(),
-      'read': false,
-    });
-    batch.set(_db.collection('notifications').doc(), {
-      'toUid': _myUid,
-      'type': 'match',
-      'title': 'Umepata Match! 🎉',
-      'description': 'Wewe na $theirName mmependana!',
-      'createdAt': FieldValue.serverTimestamp(),
-      'read': false,
-    });
-    await batch.commit();
+    await _client.from('notifications').insert([
+      {
+        'to_uid': otherUid,
+        'type': 'match',
+        'title': 'Umepata Match! 🎉',
+        'description': 'Wewe na $myName mmependana!',
+        'created_at': DateTime.now().toIso8601String(),
+      },
+      {
+        'to_uid': _myUid,
+        'type': 'match',
+        'title': 'Umepata Match! 🎉',
+        'description': 'Wewe na $theirName mmependana!',
+        'created_at': DateTime.now().toIso8601String(),
+      }
+    ]);
   }
 
-  /// Kagua kama tayari nimefungua chat na mtu huyu, na bei yake (Coins)
-  /// kama bado sijafungua. Tumia hii KABLA ya kuonyesha dialog ya malipo,
-  /// ili mtumiaji aone bei kwanza kabla ya kulipa.
   Future<Map<String, dynamic>> getChatAccessInfo(String otherUid) async {
     final String chatId = chatIdFor(otherUid);
-    final chatSnap = await _db.collection('chat_rooms').doc(chatId).get();
+    final chatSnap = await _client.from('chat_rooms').select().eq('id', chatId).maybeSingle();
 
-    final List<String> unlockedBy = chatSnap.exists
-        ? List<String>.from(chatSnap.data()?['unlockedBy'] ?? [])
-        : [];
+    final List<dynamic> unlockedBy = chatSnap?['unlocked_by'] ?? [];
 
     if (unlockedBy.contains(_myUid)) {
       return {'unlocked': true, 'price': 0};
     }
 
-    final otherDoc = await _db.collection('users').doc(otherUid).get();
-    final int price = (otherDoc.data()?['chatUnlockPrice'] ?? 0) as int;
+    final otherUser = await _client.from('users').select('chat_unlock_price').eq('uid', otherUid).maybeSingle();
+    final int price = (otherUser?['chat_unlock_price'] ?? 0) as int;
 
     return {'unlocked': false, 'price': price};
   }
 
-  /// Lipa (kama kuna bei) na ufungue chat na mtu huyu. Coins zinatoka
-  /// kwangu na kwenda moja kwa moja kwa mmiliki wa profile (yeye ndiye
-  /// aliweka bei hiyo). Chat ikiwa bure (price 0), inafungua bila malipo.
-  /// Inatupa Exception('INSUFFICIENT_COINS') kama huna coins za kutosha.
   Future<void> payAndUnlockChat(String otherUid) async {
     final String chatId = chatIdFor(otherUid);
-    final chatRef = _db.collection('chat_rooms').doc(chatId);
-    final List<String> ids = [_myUid, otherUid]..sort();
+    final ids = [_myUid, otherUid]..sort();
 
-    final otherRef = _db.collection('users').doc(otherUid);
-    final myRef = _db.collection('users').doc(_myUid);
+    // In Supabase, we would ideally use a database function (RPC) for transactions.
+    // For simplicity here, we do it in steps, but warn that it's not atomic without RPC.
+    final otherUser = await _client.from('users').select().eq('uid', otherUid).single();
+    final int price = (otherUser['chat_unlock_price'] ?? 0) as int;
 
-    await _db.runTransaction((transaction) async {
-      // KWANZA soma zote (sharti la Firestore transactions)
-      final chatSnap = await transaction.get(chatRef);
-      final otherSnap = await transaction.get(otherRef);
+    if (price > 0) {
+      final myUser = await _client.from('users').select('coins').eq('uid', _myUid).single();
+      final int myCoins = (myUser['coins'] ?? 0) as int;
 
-      final int price = (otherSnap.data()?['chatUnlockPrice'] ?? 0) as int;
-      final String existingLastMessage = chatSnap.data()?['lastMessage'] ?? '';
-
-      Map<String, dynamic> chatUpdate = {
-        'participants': ids,
-        'unlockedBy': FieldValue.arrayUnion([_myUid]),
-        'lastMessage': existingLastMessage,
-      };
-      if (!chatSnap.exists) {
-        chatUpdate['lastMessageAt'] = FieldValue.serverTimestamp();
-      }
-
-      if (price <= 0) {
-        transaction.set(chatRef, chatUpdate, SetOptions(merge: true));
-        return;
-      }
-
-      final mySnap = await transaction.get(myRef);
-      final int myCoins = (mySnap.data()?['coins'] ?? 0) as int;
       if (myCoins < price) {
         throw Exception('INSUFFICIENT_COINS');
       }
-      final int theirCoins = (otherSnap.data()?['coins'] ?? 0) as int;
 
-      transaction.update(myRef, {'coins': myCoins - price});
-      transaction.update(otherRef, {'coins': theirCoins + price});
-      transaction.set(chatRef, chatUpdate, SetOptions(merge: true));
+      await _client.from('users').update({'coins': myCoins - price}).eq('uid', _myUid);
+      await _client.from('users').update({'coins': (otherUser['coins'] ?? 0) + price}).eq('uid', otherUid);
+    }
+
+    final chatRoom = await _client.from('chat_rooms').select().eq('id', chatId).maybeSingle();
+    List<dynamic> unlockedBy = chatRoom?['unlocked_by'] ?? [];
+    if (!unlockedBy.contains(_myUid)) {
+      unlockedBy.add(_myUid);
+    }
+
+    await _client.from('chat_rooms').upsert({
+      'id': chatId,
+      'participants': ids,
+      'unlocked_by': unlockedBy,
+      'last_message_at': DateTime.now().toIso8601String(),
     });
 
-    // Arifa kwa mmiliki wa profile kama kulikuwa na malipo
-    final priceCheck = await otherRef.get();
-    final int paidPrice = (priceCheck.data()?['chatUnlockPrice'] ?? 0) as int;
-    if (paidPrice > 0) {
-      final myDoc = await myRef.get();
-      final String myName = (myDoc.data()?['name'] ?? 'Mtumiaji') as String;
-      await _db.collection('notifications').add({
-        'toUid': otherUid,
+    if (price > 0) {
+      final myProfile = await fetchMyProfile();
+      await _client.from('notifications').insert({
+        'to_uid': otherUid,
         'type': 'coins',
         'title': 'Umepokea Coins! 🪙',
-        'description': '$myName amelipa $paidPrice Coins kufungua chat na wewe.',
-        'createdAt': FieldValue.serverTimestamp(),
-        'read': false,
+        'description': '${myProfile?.name ?? 'Mtumiaji'} amelipa $price Coins kufungua chat na wewe.',
+        'created_at': DateTime.now().toIso8601String(),
       });
     }
   }
 
-  /// Watu WOTE waliompenda huyu mtumiaji (kwa LikesScreen) - real-time.
   Stream<List<UserModel>> streamUsersWhoLikedMe() {
-    return _db
-        .collectionGroup('actions')
-        .where('targetUid', isEqualTo: _myUid)
-        .where('action', isEqualTo: 'like')
-        .snapshots()
-        .asyncMap((snap) async {
-      final List<String> uids = [];
-      for (final doc in snap.docs) {
-        final String? fromUid = doc.reference.parent.parent?.id;
-        if (fromUid != null && fromUid != _myUid) {
-          uids.add(fromUid);
-        }
-      }
-
-      if (uids.isEmpty) return [];
-
-      // Firestore whereIn limit is 30. Chunking the UIDs to handle more.
-      final List<UserModel> likedByUsers = [];
-      for (var i = 0; i < uids.length; i += 30) {
-        final chunk = uids.sublist(i, i + 30 > uids.length ? uids.length : i + 30);
-        final userSnap = await _db.collection('users').where(FieldPath.documentId, whereIn: chunk).get();
-        likedByUsers.addAll(userSnap.docs.map((doc) => UserModel.fromMap(doc.data())));
-      }
-      return likedByUsers;
+    return _client
+        .from('swipes')
+        .stream(primaryKey: ['from_uid', 'target_uid'])
+        .eq('target_uid', _myUid)
+        .eq('action', 'like')
+        .asyncMap((event) async {
+      if (event.isEmpty) return [];
+      final fromUids = event.map((e) => e['from_uid'] as String).toList();
+      final usersResponse = await _client.from('users').select().in_('uid', fromUids);
+      return (usersResponse as List).map((u) => UserModel.fromMap(u)).toList();
     });
   }
 
-  /// Watumiaji wote ambao "nimependana" nao (kwa ChatListScreen - Phase 2).
-  Stream<List<Map<String, dynamic>>> streamMyMatches() {
-    return _db
-        .collection('matches')
-        .where('users', arrayContains: _myUid)
-        .snapshots()
-        .map((snap) => snap.docs.map((d) => d.data()).toList());
-  }
-
-  /// Chats zote za mtumiaji, zikiwa zimepangwa kwa ujumbe wa hivi karibuni
-  /// zaidi juu - kwa ChatListScreen. Inasoma moja kwa moja kutoka
-  /// chat_rooms (participants + lastMessage + lastMessageAt), hivyo
-  /// inasasika papo hapo kila ujumbe mpya unapotumwa.
-  ///
-  /// MUHIMU: Query hii inahitaji Composite Index kwenye Firestore Console
-  /// (Collection: chat_rooms | Fields: participants Array, lastMessageAt
-  /// Desc). Firebase itakupa LINK ya moja kwa moja ya kuunda index hiyo
-  /// kwenye debug console/logcat mara ya kwanza query hii ikishindwa.
   Stream<List<ChatModel>> streamMyChatRooms() {
-    return _db
-        .collection('chat_rooms')
-        .where('participants', arrayContains: _myUid)
-        .orderBy('lastMessageAt', descending: true)
-        .snapshots()
-        .asyncMap((snap) async {
-      final List<ChatModel> chats = [];
-      final List<String> otherUids = [];
-      final List<Map<String, dynamic>> roomData = [];
+    final myUid = _myUid;
+    return _client
+        .from('chat_rooms')
+        .stream(primaryKey: ['id'])
+        .map((event) => event.where((room) {
+              final List<dynamic> participants = room['participants'] ?? [];
+              return participants.contains(myUid);
+            }).toList())
+        .asyncMap((rooms) async {
+      if (rooms.isEmpty) return [];
 
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final List<dynamic> participants = data['participants'] ?? [];
-        final String otherUid = participants
-            .cast<String>()
-            .firstWhere((uid) => uid != _myUid, orElse: () => '');
-
-        if (otherUid.isNotEmpty) {
-          otherUids.add(otherUid);
-          roomData.add(data);
-        }
+      // Extract all other UIDs to fetch user profiles in one go
+      final Set<String> otherUids = {};
+      for (final room in rooms) {
+        final List<dynamic> participants = room['participants'] ?? [];
+        final String otherUid = participants.firstWhere((id) => id != myUid, orElse: () => '');
+        if (otherUid.isNotEmpty) otherUids.add(otherUid);
       }
 
       if (otherUids.isEmpty) return [];
 
-      // Batch fetch user profiles using whereIn (limit 30)
-      final Map<String, Map<String, dynamic>> userProfiles = {};
-      for (var i = 0; i < otherUids.length; i += 30) {
-        final chunk = otherUids.sublist(i, i + 30 > otherUids.length ? otherUids.length : i + 30);
-        final userSnap = await _db.collection('users').where(FieldPath.documentId, whereIn: chunk).get();
-        for (final doc in userSnap.docs) {
-          userProfiles[doc.id] = doc.data();
+      // Fetch all user profiles in one batch
+      final usersResponse = await _client
+          .from('users')
+          .select('uid, name, profile_image_url, chat_unlock_price')
+          .in_('uid', otherUids.toList());
+
+      final Map<String, dynamic> userMap = {
+        for (var u in (usersResponse as List)) u['uid'] as String: u
+      };
+
+      final List<ChatModel> chatList = [];
+      for (final room in rooms) {
+        final List<dynamic> participants = room['participants'] ?? [];
+        final List<dynamic> unlockedBy = room['unlocked_by'] ?? [];
+        final String otherUid = participants.firstWhere((id) => id != myUid, orElse: () => '');
+
+        if (otherUid.isNotEmpty && userMap.containsKey(otherUid)) {
+          final userData = userMap[otherUid];
+          final bool isLocked = !unlockedBy.contains(myUid);
+          final lastMessageAt = DateTime.tryParse(room['last_message_at'] ?? '');
+          
+          chatList.add(_ChatWithMetadata(
+            model: ChatModel(
+              id: otherUid,
+              name: userData['name'] ?? 'Mtumiaji',
+              avatarUrl: userData['profile_image_url'] ?? '',
+              lastMessage: room['last_message'] ?? 'Anzeni mazungumzo! 👋',
+              timeSent: _formatTimeAgo(lastMessageAt),
+              isLocked: isLocked,
+              unlockCostCoins: userData['chat_unlock_price'] ?? 50,
+            ),
+            lastMessageAt: lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+          ));
         }
       }
 
-      for (var i = 0; i < otherUids.length; i++) {
-        final otherUid = otherUids[i];
-        final data = roomData[i];
-        final userData = userProfiles[otherUid];
+      // Sort by last message time descending
+      chatList.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
 
-        if (userData == null) continue;
-
-        final Timestamp? lastMsgTs = data['lastMessageAt'] as Timestamp?;
-        final String lastMessage = (data['lastMessage'] ?? '').toString();
-
-        chats.add(ChatModel(
-          id: otherUid,
-          name: userData['name'] ?? 'Mtumiaji',
-          avatarUrl: (userData['profileImageUrl'] != null &&
-              (userData['profileImageUrl'] as String).isNotEmpty)
-              ? userData['profileImageUrl']
-              : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
-          lastMessage: lastMessage.isEmpty ? 'Anzeni mazungumzo! 👋' : lastMessage,
-          timeSent: _formatTimeAgo(lastMsgTs?.toDate()),
-          isLocked: false,
-        ));
-      }
-      return chats;
+      return chatList.map((c) => c.model).toList();
     });
   }
+}
+
+class _ChatWithMetadata {
+  final ChatModel model;
+  final DateTime lastMessageAt;
+  _ChatWithMetadata({required this.model, required this.lastMessageAt});
+}
 
   String _formatTimeAgo(DateTime? dt) {
     if (dt == null) return '';

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/gift_model.dart';
+import 'package:pacific_dating_app/core/services/supabase_service.dart';
 
 /// Modal ya kutuma zawadi - muundo wa TikTok: tray ya kusogeza kwa mlalo,
 /// coins zako halisi zinaonekana juu, na kutuma zawadi kunapunguza coins
@@ -51,11 +51,32 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
   String? _sendingGiftId;
   String? _errorMessage;
   Set<String> _unlockedGifts = {};
+  List<GiftModel> _gifts = pasificGifts;
+  bool _isLoadingGifts = false;
 
   @override
   void initState() {
     super.initState();
     _loadUnlockedGifts();
+    _loadGiftsFromSupabase();
+  }
+
+  Future<void> _loadGiftsFromSupabase() async {
+    setState(() => _isLoadingGifts = true);
+    try {
+      final supabaseGifts = await SupabaseService.instance.fetchGifts();
+      if (supabaseGifts.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _gifts = supabaseGifts.map((g) => GiftModel.fromMap(g)).toList();
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error loading gifts from Supabase: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingGifts = false);
+    }
   }
 
   Future<void> _loadUnlockedGifts() async {
@@ -100,47 +121,46 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
       _errorMessage = null;
     });
 
-    final String myUid = FirebaseAuth.instance.currentUser!.uid;
-    final myRef = FirebaseFirestore.instance.collection('users').doc(myUid);
+    final client = Supabase.instance.client;
+    final String myUid = client.auth.currentUser!.id;
 
     try {
       // If gift is already unlocked, skip coin deduction
       if (!isUnlocked) {
-        // Transaction inahakikisha coins hazipunguzwi chini ya sifuri hata
-        // kama request mbili zikitokea kwa wakati mmoja (atomic).
-        await FirebaseFirestore.instance.runTransaction((transaction) async {
-          final snapshot = await transaction.get(myRef);
-          final int liveCoins = (snapshot.data()?['coins'] ?? 0) as int;
+        // NOTE: For true atomicity in Supabase, an RPC (database function) should be used.
+        // Here we perform a check and update in steps.
+        final myUserResponse = await client.from('users').select('coins').eq('uid', myUid).single();
+        final int liveCoins = (myUserResponse['coins'] ?? 0) as int;
 
-          if (liveCoins < gift.coinPrice) {
-            throw Exception('INSUFFICIENT_COINS');
-          }
+        if (liveCoins < gift.coinPrice) {
+          throw Exception('INSUFFICIENT_COINS');
+        }
 
-          transaction.update(myRef, {'coins': liveCoins - gift.coinPrice});
-        });
+        await client.from('users').update({'coins': liveCoins - gift.coinPrice}).eq('uid', myUid);
       }
 
-      // Rekodi zawadi kwa historia
-      await FirebaseFirestore.instance.collection('gifts_sent').add({
-        'fromUid': myUid,
-        'toUid': widget.recipientUid,
-        'giftId': gift.id,
-        'giftName': gift.name,
-        'giftEmoji': gift.emoji,
-        'coinCost': gift.coinPrice,
-        'sentAt': FieldValue.serverTimestamp(),
+      // Rekodi zawadi kwa historia katika Supabase
+      await client.from('gifts_sent').insert({
+        'from_uid': myUid,
+        'to_uid': widget.recipientUid,
+        'gift_id': gift.id,
+        'gift_name': gift.name,
+        'gift_emoji': gift.emoji ?? '',
+        'gift_image_url': gift.imageUrl ?? '',
+        'coin_cost': gift.coinPrice,
+        'sent_at': DateTime.now().toIso8601String(),
       });
 
-      // Arifa kwa recipient - NotificationScreen inaisoma hii moja kwa moja
-      final myDoc = await FirebaseFirestore.instance.collection('users').doc(myUid).get();
-      final String myName = (myDoc.data()?['name'] ?? 'Mtumiaji') as String;
+      // Arifa kwa recipient - Supabase notifications table
+      final myProfileResponse = await client.from('users').select('name').eq('uid', myUid).single();
+      final String myName = (myProfileResponse['name'] ?? 'Mtumiaji') as String;
 
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'toUid': widget.recipientUid,
+      await client.from('notifications').insert({
+        'to_uid': widget.recipientUid,
         'type': 'gift',
         'title': 'Umepokea Zawadi Mpya! 🎁',
-        'description': '$myName amekutumia ${gift.emoji} ${gift.name}.',
-        'createdAt': FieldValue.serverTimestamp(),
+        'description': '$myName amekutumia ${gift.emoji ?? '🎁'} ${gift.name}.',
+        'created_at': DateTime.now().toIso8601String(),
         'read': false,
       });
 
@@ -163,7 +183,8 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
 
   @override
   Widget build(BuildContext context) {
-    final String myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final client = Supabase.instance.client;
+    final String myUid = client.auth.currentUser?.id ?? '';
 
     return Container(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
@@ -173,11 +194,11 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
       ),
       child: SafeArea(
         top: false,
-        child: StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').doc(myUid).snapshots(),
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: client.from('users').stream(primaryKey: ['uid']).eq('uid', myUid),
           builder: (context, snapshot) {
-            final int myCoins = snapshot.hasData && snapshot.data!.exists
-                ? ((snapshot.data!.data() as Map<String, dynamic>?)?['coins'] ?? 0) as int
+            final int myCoins = (snapshot.hasData && snapshot.data!.isNotEmpty)
+                ? (snapshot.data!.first['coins'] ?? 0) as int
                 : 0;
 
             return Padding(
@@ -265,13 +286,15 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                   // TikTok-style: tray ya kusogeza kwa MLALO
                   SizedBox(
                     height: 158,
-                    child: ListView.separated(
+                    child: _isLoadingGifts
+                        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                        : ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 2),
-                      itemCount: pasificGifts.length,
+                      itemCount: _gifts.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 12),
                       itemBuilder: (context, index) {
-                        final gift = pasificGifts[index];
+                        final gift = _gifts[index];
                         final bool isUnlocked = _isGiftUnlocked(gift.id);
                         final bool canAfford = isUnlocked || myCoins >= gift.coinPrice;
                         final bool isSending = _sendingGiftId == gift.id;
@@ -406,12 +429,34 @@ class _GiftCardState extends State<_GiftCard>
                   color: AppColors.primary,
                 ),
               )
-            : Transform.scale(
+            : gift.imageUrl != null
+                ? Container(
+                    padding: const EdgeInsets.all(8),
+                    child: Image.network(
+                      gift.imageUrl!,
+                      width: 50,
+                      height: 50,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => Text(
+                        gift.emoji ?? '🎁',
+                        style: const TextStyle(fontSize: 42),
+                      ),
+                    ),
+                  )
+                : Transform.scale(
                 scale: gift.isLuxury ? 1.0 + 0.08 * _glowController.value : 1.0,
                 child: Opacity(
                   opacity: locked ? 0.35 : 1.0,
                   child: Text(
-                    gift.emoji,
+                    gift.emoji ?? '🎁',
                     style: const TextStyle(fontSize: 42),
                   ),
                 ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacific_dating_app/core/services/vip_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
@@ -23,7 +22,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
   // Tier inayonunuliwa kwa sasa (kuzuia mtumiaji kubonyeza mara mbili)
   String? _purchasingTier;
 
-  String get _uid => FirebaseAuth.instance.currentUser!.uid;
+  String get _uid => Supabase.instance.client.auth.currentUser!.id;
 
   Color _tierColor(String tier) {
     switch (tier) {
@@ -61,21 +60,23 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final client = Supabase.instance.client;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("VIP Badges"),
         backgroundColor: AppColors.primary,
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').doc(_uid).snapshots(),
+      body: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: client.from('users').stream(primaryKey: ['uid']).eq('uid', _uid),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final data = snapshot.data?.data() as Map<String, dynamic>?;
+          final data = snapshot.data!.isNotEmpty ? snapshot.data!.first : null;
           final int coins = data?['coins'] ?? 0;
-          final String currentTier = data?['badgeTier'] ?? 'none';
+          final String currentTier = data?['badge_tier'] ?? 'none';
 
           return Column(
             children: [

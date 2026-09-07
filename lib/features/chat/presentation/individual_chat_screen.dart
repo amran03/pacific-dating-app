@@ -8,9 +8,8 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pacific_dating_app/core/services/storage_service.dart';
 
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
@@ -44,7 +43,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
   final ImagePicker _picker = ImagePicker();
 
-  User? get currentUser => FirebaseAuth.instance.currentUser;
+  User? get currentUser => Supabase.instance.client.auth.currentUser;
 
   AppLanguage get _lang => AppLanguage.instance;
 
@@ -63,8 +62,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // Chat lock state — track whether chat is unlocked for this session.
   StreamSubscription<void>? _playerCompleteSubscription;
 
-  // ---- Typing indicator (Firestore-backed, throttled writes) ----
-  DocumentReference<Map<String, dynamic>>? _chatRoomRef;
+  // ---- Typing indicator (Supabase-backed, throttled writes) ----
   Timer? _typingClearTimer;
   DateTime? _lastTypingWrite;
 
@@ -90,11 +88,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     final user = currentUser;
 
     if (user != null) {
-      final ids = [user.uid, widget.chat.id]..sort();
+      final ids = [user.id, widget.chat.id]..sort();
       _chatId = ids.join('_');
-      _chatRoomRef = FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(_chatId);
     }
 
     _messageController.addListener(_onMessageChanged);
@@ -122,15 +117,16 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     if (user == null || _chatId == null) return;
 
     try {
-      final chatDoc = await FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(_chatId)
-          .get();
+      final chatRoom = await Supabase.instance.client
+          .from('chat_rooms')
+          .select()
+          .eq('id', _chatId!)
+          .maybeSingle();
 
       bool isUnlocked = false;
-      if (chatDoc.exists) {
-        final unlockedBy = chatDoc.data()?['unlockedBy'] as List<dynamic>?;
-        isUnlocked = unlockedBy?.contains(user.uid) ?? false;
+      if (chatRoom != null) {
+        final unlockedBy = chatRoom['unlocked_by'] as List<dynamic>?;
+        isUnlocked = unlockedBy?.contains(user.id) ?? false;
       }
 
       // If already unlocked, no need to check further
@@ -139,12 +135,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       }
 
       // Check the unlock price from the other user's profile
-      final otherUserDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.chat.id)
-          .get();
+      final otherUser = await Supabase.instance.client
+          .from('users')
+          .select()
+          .eq('uid', widget.chat.id)
+          .single();
       
-      final price = (otherUserDoc.data()?['chatUnlockPrice'] ?? 0) as int;
+      final price = (otherUser['chat_unlock_price'] ?? 0) as int;
       
       // Chat is free (price 0) or already unlocked
       if (price <= 0) {
@@ -172,9 +169,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // ============================================================
 
   void _updateTypingStatus() {
-    final ref = _chatRoomRef;
-    final uid = currentUser?.uid;
-    if (ref == null || uid == null) return;
+    final uid = currentUser?.id;
+    final chatId = _chatId;
+    if (chatId == null || uid == null) return;
 
     if (_messageController.text.trim().isEmpty) {
       _lastTypingWrite = null;
@@ -187,13 +184,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     if (_lastTypingWrite == null ||
         now.difference(_lastTypingWrite!) >= const Duration(seconds: 2)) {
       _lastTypingWrite = now;
-      ref
-          .set(
-        {
-          'typing_$uid': FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      )
+      Supabase.instance.client
+          .from('chat_rooms')
+          .update({
+            'typing_$uid': DateTime.now().toIso8601String(),
+          })
+          .eq('id', chatId)
           .catchError((_) {});
     }
 
@@ -205,13 +201,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   }
 
   void _clearTypingStatus(String uid) {
-    _chatRoomRef
-        ?.set(
-      {
-        'typing_$uid': FieldValue.delete(),
-      },
-      SetOptions(merge: true),
-    )
+    final chatId = _chatId;
+    if (chatId == null) return;
+    
+    Supabase.instance.client
+        .from('chat_rooms')
+        .update({
+          'typing_$uid': null,
+        })
+        .eq('id', chatId)
         .catchError((_) {});
   }
 
@@ -296,27 +294,18 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   /// when this chat screen is open (WhatsApp-style read receipts).
   Future<void> _markMessagesAsSeen() async {
     final user = currentUser;
-    if (user == null) return;
+    if (user == null || _chatId == null) return;
 
     try {
-      final unreadSnap = await FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(_chatId)
-          .collection('messages')
-          .where('receiverId', isEqualTo: user.uid)
-          .where('seen', isEqualTo: false)
-          .get();
-
-      if (unreadSnap.docs.isEmpty) return;
-
-      final batch = FirebaseFirestore.instance.batch();
-      for (final doc in unreadSnap.docs) {
-        batch.update(doc.reference, {
-          'seen': true,
-          'seenAt': FieldValue.serverTimestamp(),
-        });
-      }
-      await batch.commit();
+      await Supabase.instance.client
+          .from('messages')
+          .update({
+            'seen': true,
+            'seen_at': DateTime.now().toIso8601String(),
+          })
+          .eq('chat_id', _chatId!)
+          .eq('receiver_id', user.id)
+          .eq('seen', false);
     } catch (_) {
       // Silently fail — read receipts are best-effort
     }
@@ -498,18 +487,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         final extension =
         type == 'audio' ? 'm4a' : 'jpg';
 
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('chat_media')
-            .child(chatId)
-            .child(
-          '${DateTime.now().millisecondsSinceEpoch}.$extension',
-        );
+        final storageService = StorageService();
+        finalMediaUrl = await storageService.uploadChatMedia(chatId, file, extension) ?? '';
 
-        await storageRef.putFile(file);
-
-        finalMediaUrl =
-        await storageRef.getDownloadURL();
+        if (finalMediaUrl.isEmpty) throw Exception('Upload failed');
       } catch (e) {
         if (!mounted) return;
 
@@ -533,20 +514,19 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     try {
       final messageData = <String, dynamic>{
-        'senderId': user.uid,
-        'receiverId': widget.chat.id,
+        'chat_id': chatId,
+        'sender_id': user.id,
+        'receiver_id': widget.chat.id,
         'type': type,
         'text': messageText,
-        'mediaUrl': finalMediaUrl,
-        'timestamp': FieldValue.serverTimestamp(),
+        'media_url': finalMediaUrl,
+        'created_at': DateTime.now().toIso8601String(),
         'seen': false,
       };
 
-      await FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(chatId)
-          .collection('messages')
-          .add(messageData);
+      await Supabase.instance.client
+          .from('messages')
+          .insert(messageData);
 
       String previewText;
 
@@ -564,22 +544,18 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       }
 
       final participantIds = [
-        user.uid,
+        user.id,
         widget.chat.id,
       ]..sort();
 
-      await FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(chatId)
-          .set(
-        {
-          'participants': participantIds,
-          'lastMessage': previewText,
-          'lastMessageAt':
-          FieldValue.serverTimestamp(),
-        },
-        SetOptions(merge: true),
-      );
+      await Supabase.instance.client
+          .from('chat_rooms')
+          .upsert({
+            'id': chatId,
+            'participants': participantIds,
+            'last_message': previewText,
+            'last_message_at': DateTime.now().toIso8601String(),
+          });
     } catch (e) {
       if (!mounted) return;
 
@@ -606,26 +582,21 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
   void _markAsSeen(
     Map<String, dynamic> rawData,
-    List<QueryDocumentSnapshot> messages,
+    List<dynamic> messages,
     String chatId,
   ) {
     final user = currentUser;
     if (user == null) return;
 
     // Only mark peer's messages (not my own).
-    if (rawData['senderId'] == user.uid) return;
+    if (rawData['sender_id'] == user.id) return;
 
     // Already seen — skip.
     if (rawData['seen'] == true) return;
 
-    // Find this message's doc id by matching rawData reference.
-    String? docId;
-    for (final m in messages) {
-      if (m.data() == rawData) {
-        docId = m.id;
-        break;
-      }
-    }
+    // In Supabase, the ID is usually part of the rawData
+    String? docId = rawData['id']?.toString();
+    
     if (docId == null || _pendingSeenIds.contains(docId)) return;
 
     _pendingSeenIds.add(docId);
@@ -639,18 +610,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   void _flushSeenUpdates() {
     if (_pendingSeenIds.isEmpty || !mounted) return;
 
-    final batch = FirebaseFirestore.instance.batch();
-    for (final id in _pendingSeenIds) {
-      final ref = FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(_chatId)
-          .collection('messages')
-          .doc(id);
-      batch.update(ref, {'seen': true});
-    }
+    final client = Supabase.instance.client;
+    final idsToUpdate = List<String>.from(_pendingSeenIds);
     _pendingSeenIds.clear();
 
-    batch.commit().catchError((_) {
+    client
+        .from('messages')
+        .update({'seen': true})
+        .in_('id', idsToUpdate)
+        .catchError((_) {
       // Silently ignore — read receipt is best-effort.
     });
   }
@@ -913,42 +881,32 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       );
     }
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(widget.chat.id)
-          .snapshots(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Supabase.instance.client
+          .from('users')
+          .stream(primaryKey: ['uid'])
+          .eq('uid', widget.chat.id),
       builder: (context, snapshot) {
         String otherTier = 'none';
 
         if (snapshot.hasData &&
-            snapshot.data!.exists) {
-          final data =
-          snapshot.data!.data();
-
-          if (data is Map<String, dynamic>) {
-            otherTier =
-                _safeTier(data['badgeTier']);
-          }
+            snapshot.data!.isNotEmpty) {
+          final data = snapshot.data!.first;
+          otherTier = _safeTier(data['badge_tier']);
         }
 
-        return StreamBuilder<DocumentSnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .doc(user.uid)
-              .snapshots(),
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: Supabase.instance.client
+              .from('users')
+              .stream(primaryKey: ['uid'])
+              .eq('uid', user.id),
           builder: (context, mySnapshot) {
             String myTier = 'none';
 
             if (mySnapshot.hasData &&
-                mySnapshot.data!.exists) {
-              final data =
-              mySnapshot.data!.data();
-
-              if (data is Map<String, dynamic>) {
-                myTier =
-                    _safeTier(data['badgeTier']);
-              }
+                mySnapshot.data!.isNotEmpty) {
+              final data = mySnapshot.data!.first;
+              myTier = _safeTier(data['badge_tier']);
             }
 
             String activeTier = 'none';
@@ -1101,11 +1059,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                                 presenceData
                                                     .data,
                                               );
-                                          final lastSeen =
-                                              (presenceData
-                                                  .data?['lastSeen']
-                                                  as Timestamp?)
-                                              ?.toDate();
+                                          final lastSeenStr = presenceData.data?['last_seen'];
+                                          final lastSeen = lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null;
 
                                           return Text(
                                             online
@@ -1285,13 +1240,14 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                   // Send gift as a chat message so it appears in the conversation
                                   _sendMessage(
                                     type: 'gift',
-                                    text: '${selectedGift.emoji} ${selectedGift.name}',
+                                    text: '${selectedGift.emoji ?? '🎁'} ${selectedGift.name}',
+                                    mediaUrl: selectedGift.imageUrl,
                                   );
 
                                   _showMessage(
                                     _lang.t(
-                                      'You sent ${selectedGift.emoji} ${selectedGift.name} to ${widget.chat.name}!',
-                                      sw: 'Umemtumia ${selectedGift.emoji} ${selectedGift.name} kwa ${widget.chat.name}!',
+                                      'You sent ${selectedGift.emoji ?? '🎁'} ${selectedGift.name} to ${widget.chat.name}!',
+                                      sw: 'Umemtumia ${selectedGift.emoji ?? '🎁'} ${selectedGift.name} kwa ${widget.chat.name}!',
                                     ),
                                     backgroundColor:
                                     Colors.green,
@@ -1348,22 +1304,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                   Column(
                     children: [
                       Expanded(
-                        child: StreamBuilder<
-                            QuerySnapshot>(
-                          stream: FirebaseFirestore
-                              .instance
-                              .collection(
-                            'chat_rooms',
-                          )
-                              .doc(chatId)
-                              .collection(
-                            'messages',
-                          )
-                              .orderBy(
-                            'timestamp',
-                            descending: true,
-                          )
-                              .snapshots(),
+                        child: StreamBuilder<List<Map<String, dynamic>>>(
+                          stream: Supabase.instance.client
+                              .from('messages')
+                              .stream(primaryKey: ['id'])
+                              .eq('chat_id', chatId)
+                              .order('created_at', ascending: false),
                           builder:
                               (context, snapshot) {
                             if (snapshot
@@ -1390,10 +1336,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                             }
 
                             if (!snapshot.hasData ||
-                                snapshot
-                                    .data!
-                                    .docs
-                                    .isEmpty) {
+                                snapshot.data!.isEmpty) {
                               return Center(
                                 child: Text(
                                   "Anzisha mazungumzo leo! ðŸ‘‹",
@@ -1406,8 +1349,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                               );
                             }
 
-                            final messages =
-                                snapshot.data!.docs;
+                            final messages = snapshot.data!;
 
                             return ListView.builder(
                               reverse: true,
@@ -1424,16 +1366,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                               messages.length,
                               itemBuilder:
                                   (context, index) {
-                                final rawData =
-                                messages[index]
-                                    .data();
-
-                                if (rawData
-                                is! Map<String,
-                                    dynamic>) {
-                                  return const SizedBox
-                                      .shrink();
-                                }
+                                final rawData = messages[index];
 
                                 final bubble =
                                 _buildMessageBubble(
@@ -1468,7 +1401,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
                                 return _MessageEntrance(
                                   key: ValueKey(
-                                    messages[index].id,
+                                    messages[index]['id'],
                                   ),
                                   child: bubble,
                                 );
@@ -1482,25 +1415,23 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                       // TYPING INDICATOR (Firestore-backed)
                       // ==================================================
 
-                      StreamBuilder<DocumentSnapshot>(
-                        stream: _chatRoomRef?.snapshots(),
+                      StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: Supabase.instance.client
+                            .from('chat_rooms')
+                            .stream(primaryKey: ['id'])
+                            .eq('id', chatId),
                         builder: (context, typingSnapshot) {
                           bool peerTyping = false;
 
-                          final data = typingSnapshot
-                              .data
-                              ?.data();
+                          if (typingSnapshot.hasData && typingSnapshot.data!.isNotEmpty) {
+                            final data = typingSnapshot.data!.first;
+                            final tsStr = data['typing_${widget.chat.id}'];
 
-                          if (data is Map<String, dynamic>) {
-                            final ts = data[
-                            'typing_${widget.chat.id}'];
-
-                            if (ts is Timestamp) {
-                              peerTyping = DateTime
-                                  .now()
-                                  .difference(
-                                ts.toDate(),
-                              ).inSeconds < 6;
+                            if (tsStr != null) {
+                              final ts = DateTime.tryParse(tsStr);
+                              if (ts != null) {
+                                peerTyping = DateTime.now().difference(ts).inSeconds < 6;
+                              }
                             }
                           }
 
@@ -1929,7 +1860,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     }
 
     final bool isMe =
-        msg['senderId'] == user.uid;
+        msg['sender_id'] == user.id;
 
     final String type =
         msg['type']?.toString() ?? 'text';
@@ -1938,7 +1869,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         msg['text']?.toString() ?? '';
 
     final String mediaUrl =
-        msg['mediaUrl']?.toString() ?? '';
+        msg['media_url']?.toString() ?? '';
 
     return Align(
       alignment: isMe
@@ -2059,6 +1990,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                   if (type == 'gift')
                     _buildGiftMessage(
                       text,
+                      mediaUrl,
                       isMe,
                       isLuxury,
                       accentColor,
@@ -2073,7 +2005,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        _formatTimestamp(msg['timestamp']),
+                        _formatTimestamp(msg['created_at']),
                         style: TextStyle(
                           fontSize: 10,
                           color: isMe
@@ -2109,9 +2041,14 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   String _formatTimestamp(dynamic timestamp) {
     if (timestamp == null) return '';
     try {
-      final date = timestamp is DateTime
-          ? timestamp
-          : (timestamp as dynamic).toDate();
+      final DateTime date;
+      if (timestamp is DateTime) {
+        date = timestamp;
+      } else if (timestamp is String) {
+        date = DateTime.parse(timestamp);
+      } else {
+        date = (timestamp as dynamic).toDate();
+      }
       final hour = date.hour.toString().padLeft(2, '0');
       final minute = date.minute.toString().padLeft(2, '0');
       return '$hour:$minute';
@@ -2122,6 +2059,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
   Widget _buildGiftMessage(
     String giftText,
+    String? mediaUrl,
     bool isMe,
     bool isLuxury,
     Color accentColor,
@@ -2152,11 +2090,23 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               color: AppColors.coinGold.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.card_giftcard_rounded,
-              color: AppColors.coinGoldDark,
-              size: 24,
-            ),
+            child: mediaUrl != null && mediaUrl.isNotEmpty
+                ? Image.network(
+                    mediaUrl,
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(
+                      Icons.card_giftcard_rounded,
+                      color: AppColors.coinGoldDark,
+                      size: 24,
+                    ),
+                  )
+                : const Icon(
+                    Icons.card_giftcard_rounded,
+                    color: AppColors.coinGoldDark,
+                    size: 24,
+                  ),
           ),
           const SizedBox(width: 10),
           Flexible(

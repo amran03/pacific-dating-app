@@ -24,5 +24,16 @@ class SupabaseService {
 
   SupabaseClient get client => Supabase.instance.client;
 
-  // Add data access methods here as needed
+  Future<List<Map<String, dynamic>>> fetchGifts() async {
+    try {
+      final response = await client
+          .from('gifts')
+          .select()
+          .order('coin_price', ascending: true);
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      debugPrint('Error fetching gifts: $e');
+      return [];
+    }
+  }
 }
