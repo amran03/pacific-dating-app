@@ -61,7 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(22),
               ),
               child: Column(
@@ -104,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = _theme.isDark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : AppColors.background,
+      backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
       appBar: AppBar(
         title: Text(
           _lang.t("Settings", sw: "Mipangilio"),
@@ -131,11 +131,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
+              gradient: LinearGradient(colors: AppColors.primaryGradient),
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.3),
+                  color: AppColors.primary.withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 6),
                 ),
@@ -165,7 +165,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _lang.t("Manage your account & preferences",
                             sw: "Simamia akaunti & kinga chako"),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           fontSize: 13,
                         ),
                       ),
@@ -192,7 +192,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -221,7 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.12),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -238,7 +238,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Divider(height: 1),
                 // DARK MODE — changes the WHOLE app theme instantly.
                 SwitchListTile(
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   title: _buildListTileText(
                     _lang.t("Dark Mode", sw: "Hali ya Giza"),
                     isDark: isDark,
@@ -254,7 +254,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Divider(height: 1),
                 // PUSH NOTIFICATIONS
                 SwitchListTile(
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   title: _buildListTileText(
                     _lang.t("Push Notifications", sw: "Arifa za Kushusha"),
                     isDark: isDark,
@@ -271,7 +271,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Divider(height: 1),
                 // SHOW ONLINE STATUS
                 SwitchListTile(
-                  activeColor: AppColors.primary,
+                  activeThumbColor: AppColors.primary,
                   title: _buildListTileText(
                     _lang.t("Show Online Status",
                         sw: "onyesha hali ya mtandaoni"),
@@ -305,7 +305,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -441,7 +441,7 @@ class _LangOptionRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          color: active ? AppColors.primary.withOpacity(0.1) : Colors.transparent,
+          color: active ? AppColors.primary.withValues(alpha: 0.1) : Colors.transparent,
           border: Border.all(
             color: active ? AppColors.primary : Colors.grey.shade300,
             width: 1.5,

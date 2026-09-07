@@ -187,7 +187,7 @@ class PublicProfileScreen extends StatelessWidget {
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             stops: const [0.5, 1.0],
@@ -363,9 +363,9 @@ class PublicProfileScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
+        color: AppColors.primary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

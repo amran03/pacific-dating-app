@@ -148,7 +148,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primaryDark.withOpacity(0.4),
+                            color: AppColors.primaryDark.withValues(alpha: 0.4),
                             blurRadius: 26,
                             offset: const Offset(0, 12),
                           ),
@@ -328,7 +328,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primaryDark.withOpacity(0.45),
+                          color: AppColors.primaryDark.withValues(alpha: 0.45),
                           blurRadius: 18,
                           offset: const Offset(0, 8),
                         ),

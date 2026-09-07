@@ -948,7 +948,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           ),
           Switch(
             value: value,
-            activeColor: _themeColor,
+            activeThumbColor: _themeColor,
             onChanged: (val) async {
               if (val) {
                 if (title.contains("Location")) {
@@ -959,7 +959,9 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                     // wengine kwenye Discover.
                     try {
                       final position = await Geolocator.getCurrentPosition(
-                        desiredAccuracy: LocationAccuracy.medium,
+                        locationSettings: const LocationSettings(
+                          accuracy: LocationAccuracy.medium,
+                        ),
                       );
                       _latitude = position.latitude;
                       _longitude = position.longitude;

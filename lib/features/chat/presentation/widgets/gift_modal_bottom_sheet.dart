@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
-import 'package:pacific_dating_app/core/localization/app_language.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/gift_model.dart';
 
 /// Modal ya kutuma zawadi - muundo wa TikTok: tray ya kusogeza kwa mlalo,
@@ -276,7 +275,6 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                         final bool isUnlocked = _isGiftUnlocked(gift.id);
                         final bool canAfford = isUnlocked || myCoins >= gift.coinPrice;
                         final bool isSending = _sendingGiftId == gift.id;
-                        final bool locked = !canAfford;
 
                         return _GiftCard(
                           gift: gift,
@@ -382,7 +380,7 @@ class _GiftCardState extends State<_GiftCard>
               gradient: LinearGradient(
                 colors: [
                   gift.glowColor,
-                  gift.glowColor.withOpacity(0.7),
+                  gift.glowColor.withValues(alpha: 0.7),
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
@@ -493,8 +491,8 @@ class _GiftCardState extends State<_GiftCard>
             color: locked
                 ? Colors.grey.shade200
                 : widget.isUnlocked
-                    ? AppColors.success.withOpacity(0.16)
-                    : AppColors.coinGold.withOpacity(0.16),
+                    ? AppColors.success.withValues(alpha: 0.16)
+                    : AppColors.coinGold.withValues(alpha: 0.16),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -543,8 +541,8 @@ class _GiftCardState extends State<_GiftCard>
                       ? null
                       : LinearGradient(
                           colors: [
-                            gift.glowColor.withOpacity(0.16),
-                            gift.glowColor.withOpacity(0.05),
+                            gift.glowColor.withValues(alpha: 0.16),
+                            gift.glowColor.withValues(alpha: 0.05),
                             Colors.white,
                           ],
                           begin: Alignment.topCenter,
@@ -556,15 +554,15 @@ class _GiftCardState extends State<_GiftCard>
                     color: locked
                         ? Colors.grey.shade300
                         : gift.isLuxury
-                            ? gift.glowColor.withOpacity(glow)
-                            : gift.glowColor.withOpacity(0.3),
+                            ? gift.glowColor.withValues(alpha: glow)
+                            : gift.glowColor.withValues(alpha: 0.3),
                     width: gift.isLuxury ? 2 : 1.5,
                   ),
                   boxShadow: locked
                       ? null
                       : [
                           BoxShadow(
-                            color: gift.glowColor.withOpacity(glow),
+                            color: gift.glowColor.withValues(alpha: glow),
                             blurRadius: gift.isLuxury ? 22 : 12,
                             spreadRadius: gift.isLuxury ? 2 : 0,
                             offset: const Offset(0, 6),

@@ -77,11 +77,11 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
         "Imeshindikana kupakia taarifa za VIP.",
       );
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -101,15 +101,11 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
     }
 
     final dynamic minBalanceValue = tierData['minBalance'];
-    final dynamic costValue = tierData['cost'];
+
 
     final int minBalance = minBalanceValue is int
         ? minBalanceValue
         : int.tryParse(minBalanceValue?.toString() ?? '0') ?? 0;
-
-    final int cost = costValue is int
-        ? costValue
-        : int.tryParse(costValue?.toString() ?? '0') ?? 0;
 
     // Check minimum balance before starting purchase.
     if (_currentCoins < minBalance) {
@@ -177,11 +173,11 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
         message,
       );
     } finally {
-      if (!mounted) return;
-
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -222,7 +218,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
               vertical: 6,
             ),
             decoration: BoxDecoration(
-              color: Colors.amber.withOpacity(0.2),
+              color: Colors.amber.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
                 color: Colors.amber,
@@ -322,10 +318,10 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.1),
+                  color: Colors.white.withValues(alpha: 0.1),
                 ),
               ),
               child: Column(
@@ -384,7 +380,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: isOwned
-            ? color.withOpacity(0.15)
+            ? color.withValues(alpha: 0.15)
             : const Color(0xFF1A1A1A),
 
         borderRadius: BorderRadius.circular(24),
@@ -392,14 +388,14 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
         border: Border.all(
           color: isOwned
               ? color
-              : Colors.white.withOpacity(0.1),
+              : Colors.white.withValues(alpha: 0.1),
           width: isOwned ? 2 : 1,
         ),
 
         boxShadow: [
           if (isOwned)
             BoxShadow(
-              color: color.withOpacity(0.3),
+              color: color.withValues(alpha: 0.3),
               blurRadius: 15,
               spreadRadius: 2,
             ),
@@ -420,7 +416,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.5),
+                  color: color.withValues(alpha: 0.5),
                   blurRadius: 10,
                   spreadRadius: 1,
                 ),

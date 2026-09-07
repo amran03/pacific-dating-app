@@ -274,7 +274,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         child: Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.black.withOpacity(0.4),
+                            color: Colors.black.withValues(alpha: 0.4),
                           ),
                           child: const Center(
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
@@ -389,7 +389,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 return FilterChip(
                   label: Text(interest),
                   selected: isSelected,
-                  selectedColor: AppColors.primary.withOpacity(0.15),
+                  selectedColor: AppColors.primary.withValues(alpha: 0.15),
                   checkmarkColor: AppColors.primary,
                   labelStyle: TextStyle(
                     color: isSelected ? AppColors.primary : Colors.black87,
@@ -422,7 +422,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
                 ],
               ),
               child: Column(
@@ -440,7 +440,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.coinGold.withOpacity(0.15),
+                          color: AppColors.coinGold.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(

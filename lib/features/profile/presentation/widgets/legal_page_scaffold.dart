@@ -147,7 +147,7 @@ class _HeaderCard extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primaryDark.withOpacity(0.35),
+              color: AppColors.primaryDark.withValues(alpha: 0.35),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -159,7 +159,7 @@ class _HeaderCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.18),
+                color: Colors.white.withValues(alpha: 0.18),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: Colors.white, size: 30),
@@ -180,7 +180,7 @@ class _HeaderCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 height: 1.5,
-                color: Colors.white.withOpacity(0.92),
+                color: Colors.white.withValues(alpha: 0.92),
               ),
             ),
             const SizedBox(height: 14),
@@ -190,7 +190,7 @@ class _HeaderCard extends StatelessWidget {
                 vertical: 6,
               ),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(30),
               ),
               child: Text(
@@ -251,7 +251,7 @@ class _SectionCardState extends State<_SectionCard> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 12,
                 offset: const Offset(0, 5),
               ),
@@ -265,7 +265,7 @@ class _SectionCardState extends State<_SectionCard> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(

@@ -25,7 +25,7 @@ class _GenderScreenState extends State<GenderScreen> {
         margin: const EdgeInsets.only(bottom: 14),
         padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.inputFill,
+          color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.inputFill,
           borderRadius: BorderRadius.circular(30),
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
@@ -110,7 +110,7 @@ class _GenderScreenState extends State<GenderScreen> {
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.primary.withOpacity(0.4),
+                    disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),

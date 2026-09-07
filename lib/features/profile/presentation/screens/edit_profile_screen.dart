@@ -272,7 +272,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   return FilterChip(
                     label: Text(interest),
                     selected: isSelected,
-                    selectedColor: AppColors.primary.withOpacity(0.2),
+                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
                     checkmarkColor: AppColors.primary,
                     labelStyle: TextStyle(
                       color: isSelected ? AppColors.primary : AppColors.textPrimary,

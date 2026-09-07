@@ -7,7 +7,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/firestore_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
-import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 import 'package:pacific_dating_app/screens/pacific_launch_screen.dart'; // Hakikisha njia hii ni sahihi kulingana na folda zako
 
@@ -923,7 +922,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           ),
           Switch(
             value: value,
-            activeColor: _themeColor,
+            activeThumbColor: _themeColor,
             onChanged: (val) async {
               if (val) {
                 if (title.contains("Location")) {

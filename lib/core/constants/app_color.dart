@@ -16,6 +16,7 @@ class AppColors {
   static const Color background = Color(0xFFFFFFFF);
   static const Color darkBackground = Color(0xFF121212);
   static const Color surface = Color(0xFFF3F4F8);
+  static const Color surfaceDark = Color(0xFF1E1E1E);
 
   // Neutral Colors
   // NOTE: textSecondary was darkened from #757575 to #5C5C5C so that body

@@ -16,7 +16,6 @@ import 'package:pacific_dating_app/features/profile/presentation/public_profile_
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/chat/presentation/widgets/gift_modal_bottom_sheet.dart';
 import 'package:pacific_dating_app/core/services/presence_service.dart';
-import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/localization/app_language.dart';
 
@@ -62,8 +61,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   bool _isPlaying = false;
 
   // Chat lock state — track whether chat is unlocked for this session.
-  bool _chatUnlocked = false;
-
   StreamSubscription<void>? _playerCompleteSubscription;
 
   // ---- Typing indicator (Firestore-backed, throttled writes) ----
@@ -138,7 +135,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
       // If already unlocked, no need to check further
       if (isUnlocked) {
-        _chatUnlocked = true;
         return;
       }
 
@@ -152,51 +148,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       
       // Chat is free (price 0) or already unlocked
       if (price <= 0) {
-        _chatUnlocked = true;
+        // Chat is free
       }
       // Otherwise, chat remains locked
     } catch (e) {
       debugPrint('Error checking chat lock status: $e');
-    }
-  }
-
-  /// Unlocks the chat by paying the required coins
-  Future<void> _unlockChat() async {
-    final user = currentUser;
-    if (user == null) return;
-
-    try {
-      final matchmakingService = MatchmakingService();
-      await matchmakingService.payAndUnlockChat(widget.chat.id);
-      
-      if (mounted) {
-        setState(() {
-          _chatUnlocked = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(_lang.t('Chat Unlocked! 🎉', sw: 'Mazungumzo Yamefunguliwa! 🎉')),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String message = _lang.t('Failed to unlock chat', sw: 'Imeshindikana kufungua mazungumzo');
-        if (e.toString().contains('INSUFFICIENT_COINS')) {
-          message = _lang.t('Not enough Pacific Coins', sw: 'Huna Pasific Coins za kutosha');
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
-      }
     }
   }
 
@@ -453,68 +409,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // ============================================================
   // AUDIO PLAYER
   // ============================================================
-
-  Future<void> _playAudio(String? path) async {
-    if (path == null || path.trim().isEmpty) {
-      _showMessage("Voice note haipatikani.");
-      return;
-    }
-
-    final audioPath = path.trim();
-
-    try {
-      if (_isPlaying &&
-          _currentlyPlayingPath == audioPath) {
-        await _audioPlayer.pause();
-
-        if (!mounted) return;
-
-        setState(() {
-          _isPlaying = false;
-        });
-
-        return;
-      }
-
-      await _audioPlayer.stop();
-
-      if (audioPath.startsWith('http://') ||
-          audioPath.startsWith('https://')) {
-        await _audioPlayer.play(
-          UrlSource(audioPath),
-        );
-      } else {
-        final file = File(audioPath);
-
-        if (!await file.exists()) {
-          _showMessage("Voice note haipatikani kwenye kifaa.");
-          return;
-        }
-
-        await _audioPlayer.play(
-          DeviceFileSource(audioPath),
-        );
-      }
-
-      if (!mounted) return;
-
-      setState(() {
-        _isPlaying = true;
-        _currentlyPlayingPath = audioPath;
-      });
-    } catch (e) {
-      if (!mounted) return;
-
-      setState(() {
-        _isPlaying = false;
-        _currentlyPlayingPath = null;
-      });
-
-      _showMessage(
-        "Imeshindikana kucheza voice note.",
-      );
-    }
-  }
 
   // ============================================================
   // IMAGE PICKER
@@ -787,13 +681,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.92),
+                color: Colors.white.withValues(alpha: 0.92),
                 borderRadius:
                 const BorderRadius.vertical(
                   top: Radius.circular(30),
                 ),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.4),
+                  color: Colors.white.withValues(alpha: 0.4),
                 ),
               ),
               child: SafeArea(
@@ -862,7 +756,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
+                  color: Colors.black.withValues(alpha: 0.12),
                   blurRadius: 12,
                   offset: const Offset(0, 6),
                 ),
@@ -941,7 +835,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: accentColor.withOpacity(0.25),
+            color: accentColor.withValues(alpha: 0.25),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -978,7 +872,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       width: radius * 2,
       height: radius * 2,
       color: isLuxury
-          ? Colors.white.withOpacity(0.12)
+          ? Colors.white.withValues(alpha: 0.12)
           : Colors.grey.shade200,
       child: Icon(
         Icons.person_rounded,
@@ -1098,9 +992,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                     ),
                     child: AppBar(
                       backgroundColor: isLuxury
-                          ? bgColor.withOpacity(0.7)
+                          ? bgColor.withValues(alpha: 0.7)
                           : Colors.white
-                          .withOpacity(0.7),
+                          .withValues(alpha: 0.7),
                       elevation: 0,
                       scrolledUnderElevation: 0,
 
@@ -1177,9 +1071,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                             BoxShadow(
                                               color: AppColors
                                                   .success
-                                                  .withOpacity(
-                                                0.5,
-                                              ),
+                                                  .withValues(alpha: 0.5),
                                               blurRadius:
                                               6,
                                               spreadRadius:
@@ -1263,9 +1155,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 ? accentColor
                                 : AppColors
                                 .primaryDeep)
-                                .withOpacity(
-                              0.12,
-                            ),
+                                .withValues(alpha: 0.12),
                             shape:
                             BoxShape.circle,
                           ),
@@ -1316,9 +1206,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 ? accentColor
                                 : AppColors
                                 .primaryDeep)
-                                .withOpacity(
-                              0.12,
-                            ),
+                                .withValues(alpha: 0.12),
                             shape:
                             BoxShape.circle,
                           ),
@@ -1369,7 +1257,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 .coinGold
                                 : AppColors
                                 .coinGoldDark)
-                                .withOpacity(0.15),
+                                .withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
                           child: IconButton(
@@ -1434,7 +1322,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: accentColor
-                            .withOpacity(0.15),
+                            .withValues(alpha: 0.15),
                       ),
                     ),
                   ),
@@ -1448,7 +1336,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: Colors.pinkAccent
-                            .withOpacity(0.1),
+                            .withValues(alpha: 0.1),
                       ),
                     ),
                   ),
@@ -1695,9 +1583,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                               BoxDecoration(
                                 color: isLuxury
                                     ? Colors.black
-                                    .withOpacity(0.5)
+                                    .withValues(alpha: 0.5)
                                     : Colors.white
-                                    .withOpacity(0.8),
+                                    .withValues(alpha: 0.8),
                                 borderRadius:
                                 BorderRadius.circular(
                                   30,
@@ -1705,20 +1593,14 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 border: Border.all(
                                   color: isLuxury
                                       ? accentColor
-                                      .withOpacity(
-                                    0.3,
-                                  )
+                                      .withValues(alpha: 0.3)
                                       : Colors.white
-                                      .withOpacity(
-                                    0.6,
-                                  ),
+                                      .withValues(alpha: 0.6),
                                 ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black
-                                        .withOpacity(
-                                      0.05,
-                                    ),
+                                        .withValues(alpha: 0.05),
                                     blurRadius: 20,
                                     offset:
                                     const Offset(
@@ -1941,9 +1823,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                             colors: [
                                               accentColor,
                                               accentColor
-                                                  .withOpacity(
-                                                0.8,
-                                              ),
+                                                  .withValues(alpha: 0.8),
                                             ],
                                           ),
                                           shape:
@@ -1952,9 +1832,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                           boxShadow: [
                                             BoxShadow(
                                               color: accentColor
-                                                  .withOpacity(
-                                                0.4,
-                                              ),
+                                                  .withValues(alpha: 0.4),
                                               blurRadius:
                                               10,
                                               offset:
@@ -2079,7 +1957,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               ? LinearGradient(
             colors: [
               accentColor,
-              accentColor.withOpacity(0.8),
+              accentColor.withValues(alpha: 0.8),
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -2088,8 +1966,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           color: isMe
               ? null
               : (isLuxury
-              ? Colors.white.withOpacity(0.1)
-              : Colors.white.withOpacity(0.9)),
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.white.withValues(alpha: 0.9)),
           borderRadius:
           BorderRadius.only(
             topLeft:
@@ -2106,8 +1984,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           boxShadow: [
             BoxShadow(
               color: isMe
-                  ? accentColor.withOpacity(0.25)
-                  : Colors.black.withOpacity(0.04),
+                  ? accentColor.withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: 0.04),
               blurRadius: 12,
               offset: const Offset(0, 5),
             ),
@@ -2199,7 +2077,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         style: TextStyle(
                           fontSize: 10,
                           color: isMe
-                              ? Colors.white.withOpacity(0.7)
+                              ? Colors.white.withValues(alpha: 0.7)
                               : (isLuxury
                                   ? Colors.white38
                                   : Colors.black38),
@@ -2214,7 +2092,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                           size: 14,
                           color: msg['seen'] == true
                               ? const Color(0xFF4FC3F7) // Light blue — WhatsApp-style "seen"
-                              : Colors.white.withOpacity(0.6),
+                              : Colors.white.withValues(alpha: 0.6),
                         ),
                       ],
                     ],
@@ -2234,8 +2112,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       final date = timestamp is DateTime
           ? timestamp
           : (timestamp as dynamic).toDate();
-      final hour = (date as DateTime).hour.toString().padLeft(2, '0');
-      final minute = (date as DateTime).minute.toString().padLeft(2, '0');
+      final hour = date.hour.toString().padLeft(2, '0');
+      final minute = date.minute.toString().padLeft(2, '0');
       return '$hour:$minute';
     } catch (_) {
       return '';
@@ -2253,15 +2131,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppColors.coinGold.withOpacity(0.2),
-            AppColors.coinGold.withOpacity(0.05),
+            AppColors.coinGold.withValues(alpha: 0.2),
+            AppColors.coinGold.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppColors.coinGold.withOpacity(0.3),
+          color: AppColors.coinGold.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -2271,7 +2149,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.coinGold.withOpacity(0.15),
+              color: AppColors.coinGold.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -2359,9 +2237,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               decoration: BoxDecoration(
                 color: isMe
                     ? Colors.white
-                    .withOpacity(0.15)
+                    .withValues(alpha: 0.15)
                     : Colors.black
-                    .withOpacity(0.05),
+                    .withValues(alpha: 0.05),
                 borderRadius:
                 BorderRadius.circular(16),
               ),
@@ -2412,75 +2290,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   }
 
   // ============================================================
-  // AUDIO MESSAGE
-  // ============================================================
-
-  Widget _buildAudioMessage(
-      String mediaUrl,
-      String text,
-      bool isMe,
-      bool isLuxury,
-      Color accentColor,
-      ) {
-    final bool currentlyPlaying =
-        _isPlaying &&
-            _currentlyPlayingPath ==
-                mediaUrl;
-
-    return GestureDetector(
-      onTap: mediaUrl.trim().isEmpty
-          ? null
-          : () => _playAudio(mediaUrl),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding:
-            const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isMe
-                  ? Colors.white.withOpacity(0.2)
-                  : accentColor
-                  .withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              currentlyPlaying
-                  ? Icons.pause_rounded
-                  : Icons.play_arrow_rounded,
-              color: isMe
-                  ? Colors.white
-                  : accentColor,
-              size: 26,
-            ),
-          ),
-
-          const SizedBox(width: 10),
-
-          Flexible(
-            child: Text(
-              text.isNotEmpty
-                  ? text
-                  : 'Voice Note',
-              overflow:
-              TextOverflow.ellipsis,
-              style: TextStyle(
-                color: isMe
-                    ? Colors.white
-                    : (isLuxury
-                    ? Colors.white
-                    : Colors.black87),
-                fontWeight:
-                FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
   // BROKEN MEDIA
   // ============================================================
 
@@ -2494,10 +2303,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       height: 130,
       decoration: BoxDecoration(
         color: isMe
-            ? Colors.white.withOpacity(0.12)
+            ? Colors.white.withValues(alpha: 0.12)
             : (isLuxury
-            ? Colors.white.withOpacity(0.08)
-            : Colors.black.withOpacity(0.05)),
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05)),
         borderRadius:
         BorderRadius.circular(16),
       ),
@@ -2629,17 +2438,17 @@ class _TypingIndicatorState extends State<_TypingIndicator>
       ),
       decoration: BoxDecoration(
         color: widget.isLuxury
-            ? Colors.black.withOpacity(0.5)
+            ? Colors.black.withValues(alpha: 0.5)
             : Colors.white,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: widget.isLuxury
-              ? widget.accentColor.withOpacity(0.3)
+              ? widget.accentColor.withValues(alpha: 0.3)
               : Colors.grey.shade300,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -2666,9 +2475,9 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                       shape: BoxShape.circle,
                       color: widget.isLuxury
                           ? widget.accentColor
-                          .withOpacity(0.35 + 0.65 * bounce)
+                          .withValues(alpha: 0.35 + 0.65 * bounce)
                           : AppColors.primary
-                          .withOpacity(0.35 + 0.65 * bounce),
+                          .withValues(alpha: 0.35 + 0.65 * bounce),
                     ),
                   ),
                 ),

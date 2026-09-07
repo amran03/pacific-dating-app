@@ -73,7 +73,7 @@ class _PacificLaunchScreenState extends State<PacificLaunchScreen>
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                       ),
                       child: const Icon(
                         Icons.favorite,

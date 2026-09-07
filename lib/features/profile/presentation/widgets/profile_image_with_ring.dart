@@ -188,7 +188,7 @@ class _ProfileImageWithRingState extends State<ProfileImageWithRing>
             ),
             boxShadow: [
               BoxShadow(
-                color: tierGradient.first.withOpacity(pulse),
+                color: tierGradient.first.withValues(alpha: pulse),
                 blurRadius: 12,
                 spreadRadius: 1.5,
               ),

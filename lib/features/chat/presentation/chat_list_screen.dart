@@ -29,12 +29,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withOpacity(0.6)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.6)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -46,7 +46,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: AppColors.coinGold.withOpacity(0.15),
+                      color: AppColors.coinGold.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.lock_rounded, color: AppColors.coinGold, size: 40),
@@ -80,8 +80,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         child: ElevatedButton(
                           onPressed: () async {
                             Navigator.pop(context);
+                            if (!context.mounted) return;
                             try {
                               await _matchmakingService.payAndUnlockChat(chat.id);
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text("Chat with ${chat.name} Unlocked Successfully!"),
@@ -91,6 +93,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                 ),
                               );
                             } catch (e) {
+                              if (!context.mounted) return;
                               CoreErrorService().showError(
                                 context,
                                 CoreErrorService().mapExceptionToMessage(e),
@@ -132,7 +135,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               height: 180,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.primary.withOpacity(0.12),
+                color: AppColors.primary.withValues(alpha: 0.12),
               ),
             ),
           ),
@@ -144,7 +147,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               height: 200,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.pinkAccent.withOpacity(0.08),
+                color: Colors.pinkAccent.withValues(alpha: 0.08),
               ),
             ),
           ),
@@ -204,13 +207,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   SliverAppBar(
                     floating: true,
                     pinned: true,
-                    backgroundColor: Colors.white.withOpacity(0.7),
+                    backgroundColor: Colors.white.withValues(alpha: 0.7),
                     elevation: 0,
                     scrolledUnderElevation: 0,
                     flexibleSpace: ClipRRect(
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(color: Colors.white.withOpacity(0.5)),
+                        child: Container(color: Colors.white.withValues(alpha: 0.5)),
                       ),
                     ),
                     title: const Text(
@@ -229,7 +232,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
+                              color: Colors.black.withValues(alpha: 0.04),
                               blurRadius: 8,
                               offset: const Offset(0, 2),
                             ),
@@ -296,7 +299,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                                 ),
                                                 boxShadow: [
                                                   BoxShadow(
-                                                    color: AppColors.primary.withOpacity(0.3),
+                                                    color: AppColors.primary.withValues(alpha: 0.3),
                                                     blurRadius: 8,
                                                     offset: const Offset(0, 4),
                                                   ),
@@ -357,12 +360,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.85),
+                              color: Colors.white.withValues(alpha: 0.85),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.8)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.04),
+                                  color: Colors.black.withValues(alpha: 0.04),
                                   blurRadius: 12,
                                   offset: const Offset(0, 5),
                                 ),
@@ -390,7 +393,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                           shape: BoxShape.circle,
                                           boxShadow: [
                                             BoxShadow(
-                                              color: Colors.black.withOpacity(0.08),
+                                              color: Colors.black.withValues(alpha: 0.08),
                                               blurRadius: 6,
                                               offset: const Offset(0, 3),
                                             ),
@@ -436,7 +439,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                         ? Container(
                                       padding: const EdgeInsets.all(8),
                                       decoration: BoxDecoration(
-                                        color: AppColors.coinGold.withOpacity(0.15),
+                                        color: AppColors.coinGold.withValues(alpha: 0.15),
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(Icons.lock_outline_rounded, color: AppColors.coinGold, size: 20),

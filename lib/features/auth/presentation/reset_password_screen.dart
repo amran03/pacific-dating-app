@@ -55,7 +55,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
                   child: Container(
-                    color: Colors.black.withOpacity(0.4),
+                    color: Colors.black.withValues(alpha: 0.4),
                   ),
                 ),
               ),
@@ -113,7 +113,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryDark.withOpacity(0.4),
+                        color: AppColors.primaryDark.withValues(alpha: 0.4),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -184,7 +184,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
+                      color: Colors.black.withValues(alpha: 0.06),
                       blurRadius: 14,
                       offset: const Offset(0, 6),
                     ),
@@ -219,7 +219,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryDark.withOpacity(0.45),
+                        color: AppColors.primaryDark.withValues(alpha: 0.45),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
@@ -415,7 +415,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primaryDark.withOpacity(0.4),
+                    color: AppColors.primaryDark.withValues(alpha: 0.4),
                     blurRadius: 16,
                     offset: const Offset(0, 8),
                   ),

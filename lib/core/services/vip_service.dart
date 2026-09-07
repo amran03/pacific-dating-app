@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 
 class VIPService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;

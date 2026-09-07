@@ -208,7 +208,7 @@ class _CallScreenState extends State<CallScreen>
                   height: 240,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _sceneAccent.withOpacity(0.10),
+                    color: _sceneAccent.withValues(alpha: 0.10),
                   ),
                 ),
               ),
@@ -239,7 +239,7 @@ class _CallScreenState extends State<CallScreen>
           Icon(
             Icons.lock_rounded,
             size: 14,
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white.withValues(alpha: 0.7),
           ),
           const SizedBox(width: 6),
           Text(
@@ -247,7 +247,7 @@ class _CallScreenState extends State<CallScreen>
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
             ),
           ),
         ],
@@ -285,7 +285,7 @@ class _CallScreenState extends State<CallScreen>
               fontWeight: FontWeight.w600,
               color: _phase == CallPhase.ongoing
                   ? AppColors.callGreen
-                  : Colors.white.withOpacity(0.75),
+                  : Colors.white.withValues(alpha: 0.75),
             ),
           ),
         ),
@@ -314,8 +314,8 @@ class _CallScreenState extends State<CallScreen>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      _sceneAccent.withOpacity(0.16),
-                      Colors.black.withOpacity(0.4),
+                      _sceneAccent.withValues(alpha: 0.16),
+                      Colors.black.withValues(alpha: 0.4),
                     ],
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
@@ -345,7 +345,7 @@ class _CallScreenState extends State<CallScreen>
                           fontWeight: FontWeight.w600,
                           color: _phase == CallPhase.ongoing
                               ? AppColors.callGreen
-                              : Colors.white.withOpacity(0.75),
+                              : Colors.white.withValues(alpha: 0.75),
                         ),
                       ),
                     ),
@@ -380,12 +380,12 @@ class _CallScreenState extends State<CallScreen>
                         colors: [Color(0xFF1C1F26), Color(0xFF1C1F26)],
                       ),
                 border: Border.all(
-                  color: Colors.white.withOpacity(0.25),
+                  color: Colors.white.withValues(alpha: 0.25),
                   width: 1.5,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.45),
+                    color: Colors.black.withValues(alpha: 0.45),
                     blurRadius: 16,
                     offset: const Offset(0, 8),
                   ),
@@ -395,7 +395,7 @@ class _CallScreenState extends State<CallScreen>
                 _isVideoEnabled
                     ? Icons.person_rounded
                     : Icons.videocam_off_rounded,
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 size: 34,
               ),
             ),
@@ -436,7 +436,7 @@ class _CallScreenState extends State<CallScreen>
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primaryDark.withOpacity(0.45),
+                  color: AppColors.primaryDark.withValues(alpha: 0.45),
                   blurRadius: 26,
                   offset: const Offset(0, 10),
                 ),
@@ -461,11 +461,11 @@ class _CallScreenState extends State<CallScreen>
     return Container(
       width: size,
       height: size,
-      color: Colors.white.withOpacity(0.12),
+      color: Colors.white.withValues(alpha: 0.12),
       child: Icon(
         Icons.person_rounded,
         size: size * 0.55,
-        color: Colors.white.withOpacity(0.9),
+        color: Colors.white.withValues(alpha: 0.9),
       ),
     );
   }
@@ -481,7 +481,7 @@ class _CallScreenState extends State<CallScreen>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: _sceneAccent.withOpacity((1 - t) * 0.45),
+              color: _sceneAccent.withValues(alpha: (1 - t) * 0.45),
               width: 2,
             ),
           ),
@@ -508,7 +508,7 @@ class _CallScreenState extends State<CallScreen>
                   height: 8,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _sceneAccent.withOpacity(0.4 + 0.6 * (1 - t)),
+                    color: _sceneAccent.withValues(alpha: 0.4 + 0.6 * (1 - t)),
                   ),
                 ),
               ),
@@ -619,7 +619,7 @@ class _CallButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bg = backgroundColor ??
-        (active ? AppColors.primaryDark : Colors.white.withOpacity(0.12));
+        (active ? AppColors.primaryDark : Colors.white.withValues(alpha: 0.12));
     final size = large ? 72.0 : 60.0;
 
     Widget button = Semantics(
@@ -637,7 +637,7 @@ class _CallButton extends StatelessWidget {
             color: bg,
             boxShadow: [
               BoxShadow(
-                color: bg.withOpacity(0.4),
+                color: bg.withValues(alpha: 0.4),
                 blurRadius: 14,
                 offset: const Offset(0, 6),
               ),
@@ -669,7 +669,7 @@ class _CallButton extends StatelessWidget {
           style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w600,
-            color: Colors.white.withOpacity(0.85),
+            color: Colors.white.withValues(alpha: 0.85),
           ),
         ),
       ],

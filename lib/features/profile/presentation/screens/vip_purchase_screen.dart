@@ -84,7 +84,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
+                  color: AppColors.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -135,7 +135,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                             height: 48,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: _tierColor(tierKey).withOpacity(0.15),
+                              color: _tierColor(tierKey).withValues(alpha: 0.15),
                             ),
                             child: Icon(Icons.workspace_premium_rounded,
                                 color: _tierColor(tierKey)),

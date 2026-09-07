@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
@@ -105,11 +104,6 @@ class _LikesScreenState extends State<LikesScreen> {
                           ? user.profileImageUrl!
                           : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600';
 
-                      // TODO (Phase 4/VIP): watu wa VIP pekee wataona picha
-                      // bila blur. Kwa sasa (bila mfumo wa VIP bado) zote
-                      // zinaonekana wazi.
-                      const bool isBlurred = false;
-
                       return GestureDetector(
                           onTap: () {
                             Navigator.push(
@@ -124,17 +118,11 @@ class _LikesScreenState extends State<LikesScreen> {
                             child: Stack(
                               children: [
                                 Positioned.fill(
-                                  child: ImageFiltered(
-                                    imageFilter: ImageFilter.blur(
-                                      sigmaX: isBlurred ? 12 : 0,
-                                      sigmaY: isBlurred ? 12 : 0,
-                                    ),
-                                    child: Image.network(
-                                      imageUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) =>
-                                          Container(color: Colors.grey.shade300),
-                                    ),
+                                  child: Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) =>
+                                        Container(color: Colors.grey.shade300),
                                   ),
                                 ),
                                 Container(
@@ -146,46 +134,24 @@ class _LikesScreenState extends State<LikesScreen> {
                                     ),
                                   ),
                                 ),
-                                if (isBlurred)
-                                  Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.lock_rounded, color: Colors.white, size: 36),
-                                        const SizedBox(height: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: AppColors.primary,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: const Text(
-                                            "VIP Unlock",
-                                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                                          ),
+                                Positioned(
+                                  bottom: 12,
+                                  left: 12,
+                                  right: 12,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "${user.name}, ${user.age}",
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 16,
                                         ),
-                                      ],
-                                    ),
-                                  )
-                                else
-                                  Positioned(
-                                    bottom: 12,
-                                    left: 12,
-                                    right: 12,
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "${user.name}, ${user.age}",
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
+                                ),
                               ],
                             ),
                           ));

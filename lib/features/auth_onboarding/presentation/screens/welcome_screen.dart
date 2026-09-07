@@ -232,7 +232,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 height: 200,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.10),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                 ),
               ),
             ),
@@ -244,7 +244,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 height: 180,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primaryDark.withOpacity(0.08),
+                  color: AppColors.primaryDark.withValues(alpha: 0.08),
                 ),
               ),
             ),
@@ -256,7 +256,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                 height: 220,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.07),
+                  color: AppColors.primary.withValues(alpha: 0.07),
                 ),
               ),
             ),
@@ -299,7 +299,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           borderRadius: BorderRadius.circular(34),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.primaryDark.withOpacity(0.35),
+                              color: AppColors.primaryDark.withValues(alpha: 0.35),
                               blurRadius: 30,
                               offset: const Offset(0, 14),
                             ),
@@ -403,7 +403,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               boxShadow: [
                                 BoxShadow(
                                   color: AppColors.primaryDark
-                                      .withOpacity(0.4),
+                                      .withValues(alpha: 0.4),
                                   blurRadius: 18,
                                   offset: const Offset(0, 8),
                                 ),
@@ -473,9 +473,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
             ],
           ),
         ),
-          ],
-        ),
-      ),
+      ],
+    ),
+  ),
+);
+      },
     );
   }
 }
@@ -521,7 +523,7 @@ class _LanguageToggleState extends State<_LanguageToggle> {
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),

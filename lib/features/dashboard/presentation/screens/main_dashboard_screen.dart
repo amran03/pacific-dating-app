@@ -423,7 +423,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
   Offset _dragOffset = Offset.zero;
   bool _isDragging = false;
   bool _isLoading = true;
-  bool _isProcessingSwipe = false;
   bool _isLoadingMore = false;
 
   final MatchmakingService _matchmakingService = MatchmakingService();
@@ -541,7 +540,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
             ? u.profileImageUrl!
             : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
         'isMatched': false,
-        'chatUnlockPrice': u.chatUnlockPrice ?? 0,
+        'chatUnlockPrice': u.chatUnlockPrice,
       };
     })
         .toList();
@@ -910,7 +909,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.65),
+                        color: Colors.black.withValues(alpha: 0.65),
                         borderRadius: BorderRadius.circular(30),
                       ),
                       child: Row(
@@ -974,7 +973,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
               border: Border.all(color: Colors.white, width: 3),
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.5),
+                  color: color.withValues(alpha: 0.5),
                   blurRadius: 18,
                   offset: const Offset(0, 6),
                 ),
@@ -1032,8 +1031,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
   }
 
   Widget _buildCardUI(Map<String, dynamic> profile, {required bool isFront}) {
-    bool isMatched = profile['isMatched'] ?? false;
-
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(32),
