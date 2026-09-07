@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_color.dart';
 import '../../../core/services/matchmaking_service.dart';
+import '../../../core/services/core_error_service.dart';
 import '../../chat/domain/models/chat_model.dart';
 import '../../profile/presentation/public_profile_screen.dart';
 import 'individual_chat_screen.dart';
@@ -54,13 +55,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   Text(
                     "Unlock Chat with ${chat.name}",
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87),
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.black87),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     "Maongezi haya yatafungwa pindi dakika 30 zikiisha. Tuma Gift au tumia ${chat.unlockCostCoins} Pasific Coins ili kufungua maongezi ya daima!",
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.black54, fontSize: 13, height: 1.4),
+                    style: const TextStyle(color: Colors.black54, fontSize: 13, height: 1.4, fontWeight: FontWeight.w300),
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -71,22 +72,30 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          child: const Text("Baadaye", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                          child: const Text("Baadaye", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w800)),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () {
+                          onPressed: () async {
                             Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("Chat with ${chat.name} Unlocked Successfully! 🎉"),
-                                backgroundColor: Colors.green,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            );
+                            try {
+                              await _matchmakingService.payAndUnlockChat(chat.id);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("Chat with ${chat.name} Unlocked Successfully!"),
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                ),
+                              );
+                            } catch (e) {
+                              CoreErrorService().showError(
+                                context,
+                                CoreErrorService().mapExceptionToMessage(e),
+                              );
+                            }
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
@@ -94,7 +103,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
-                          child: Text("Unlock (${chat.unlockCostCoins} Coins)", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          child: Text("Unlock (${chat.unlockCostCoins} Coins)", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
                         ),
                       ),
                     ],
@@ -175,7 +184,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       const SizedBox(height: 16),
                       const Text(
                         "Bado hakuna mazungumzo",
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -208,7 +217,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       "Messages",
                       style: TextStyle(
                         color: Colors.black87,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                         fontSize: 24,
                       ),
                     ),
@@ -245,7 +254,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           // New Matches Header
                           const Text(
                             "New Matches",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87),
                           ),
                           const SizedBox(height: 12),
 
@@ -330,7 +339,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           const SizedBox(height: 16),
                           const Text(
                             "Conversations",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87),
                           ),
                           const SizedBox(height: 10),
                         ],
@@ -398,14 +407,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                       children: [
                                         Text(
                                           chat.name,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
+                                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.black87),
                                         ),
                                         Text(
                                           chat.timeSent,
                                           style: TextStyle(
                                             fontSize: 11,
                                             color: chat.isLocked ? Colors.redAccent : Colors.black45,
-                                            fontWeight: chat.isLocked ? FontWeight.bold : FontWeight.w500,
+                                            fontWeight: chat.isLocked ? FontWeight.w800 : FontWeight.w300,
                                           ),
                                         ),
                                       ],
@@ -418,7 +427,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                         overflow: TextOverflow.ellipsis,
                                         style: TextStyle(
                                           color: chat.isLocked ? AppColors.coinGold : Colors.black54,
-                                          fontWeight: chat.isLocked ? FontWeight.w600 : FontWeight.normal,
+                                          fontWeight: chat.isLocked ? FontWeight.w800 : FontWeight.w300,
                                           fontSize: 13,
                                         ),
                                       ),

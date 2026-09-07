@@ -123,7 +123,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 16),
             Text(
               "Andika jina la mtu unayemtafuta",
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 15, fontWeight: FontWeight.w300),
             ),
           ],
         ),
@@ -148,7 +148,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 6),
             Text(
               "Jaribu jina lingine au hakikisha tahajia sahihi",
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w300),
             ),
           ],
         ),
@@ -178,7 +178,7 @@ class _SearchScreenState extends State<SearchScreen> {
             leading: CircleAvatar(radius: 26, backgroundImage: NetworkImage(imageUrl)),
             title: Text(
               "${user.name}, ${user.age}",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
             subtitle: (user.location != null && user.location!.isNotEmpty)
                 ? Text(user.location!, style: TextStyle(color: Colors.grey.shade600, fontSize: 12.5))

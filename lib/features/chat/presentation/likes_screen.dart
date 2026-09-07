@@ -23,10 +23,10 @@ class _LikesScreenState extends State<LikesScreen> {
         elevation: 0,
         backgroundColor: Colors.white,
         title: const Text(
-          "Likes Center ❤️",
+          "Likes Center",
           style: TextStyle(
             color: Colors.black87,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w800,
             fontSize: 22,
           ),
         ),
@@ -67,13 +67,13 @@ class _LikesScreenState extends State<LikesScreen> {
                   const SizedBox(height: 16),
                   const Text(
                     "Bado hakuna aliyekupenda",
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
                   ),
                   const SizedBox(height: 6),
                   const Text(
                     "Endelea kutafuta kwenye Discover - watu wanaokupenda\nwataonekana hapa moja kwa moja.",
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
+                    style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w300),
                   ),
                 ],
               ),
@@ -179,7 +179,7 @@ class _LikesScreenState extends State<LikesScreen> {
                                           "${user.name}, ${user.age}",
                                           style: const TextStyle(
                                             color: Colors.white,
-                                            fontWeight: FontWeight.bold,
+                                            fontWeight: FontWeight.w800,
                                             fontSize: 16,
                                           ),
                                         ),

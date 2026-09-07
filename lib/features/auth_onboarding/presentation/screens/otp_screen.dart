@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_color.dart';
+import '../../../../core/services/validation_service.dart';
+import '../../../../core/services/core_error_service.dart';
 import 'name_screen.dart';
 
 class OtpScreen extends StatefulWidget {
@@ -133,6 +135,12 @@ class _OtpScreenState extends State<OtpScreen> {
                 height: 56,
                 child: ElevatedButton(
                   onPressed: () {
+                    final String otpCode = _controllers.map((c) => c.text).join();
+                    final String? error = ValidationService().validatePhone(otpCode); // Reuse phone regex for numeric check
+                    if (error != null || otpCode.length != 4) {
+                      CoreErrorService().showError(context, "Tafadhali weka namba 4 sahihi.");
+                      return;
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(

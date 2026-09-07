@@ -1,15 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+// FILE ya Firebase options (inazohitajika Firebase.initializeApp ili
+// ishiriki na project yako). Ninawila values ya project yako kwenye
+// lib/firebase_options.dart.
+import 'firebase_options.dart';
 
 // Hakikisha njia hii ya import inaendana na ulipoweka faili lako la WelcomeScreen
-import 'features/auth_onboarding/presentation/screens/welcome_screen.dart';
-import 'features/dashboard/presentation/screens/main_dashboard_screen.dart';
+import 'core/localization/app_language.dart';
+import 'core/localization/app_theme.dart';
+import 'core/services/auth_gate.dart';
+import 'core/services/presence_tracker.dart';
+import 'core/services/supabase_service.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  // Lugha na THEME iliyohifadhiwa — zinaweka kabla app haijafunguka.
+  await AppLanguage.instance.load();
+  await AppTheme.instance.load();
+
+  // Supabase Initialization
+  try {
+    await SupabaseService.instance.initialize();
+  } catch (e) {
+    debugPrint('Supabase initialization failed: $e');
+  }
+
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    // Backend bado haipatikani (mfano mtandao au Firebase options haziweke) —
+    // app inafunguka hata hivyo; Firebase-dependent screens zitaonyesha
+    // hali zao za kusubiri/error badala ya crash.
+    debugPrint('Firebase initialization failed: $e');
+  }
+
   runApp(const MyApp());
 }
 
@@ -18,66 +47,50 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Pacific Dating App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFFFF4B72)),
-        useMaterial3: true,
-      ),
-      home: const AuthGate(),
-    );
-  }
-}
+    // FIX: Lugha (EN/SW) na THEME (Light/Dark) ni ChangeNotifiers.
+    // Tuna nested ListenableBuilders ili zis RESET navigation stack.
+    // Kila mabadiliko, tunarebuild wrapper (theme/locale), lakini
+    // Navigator yenyewe inabaki salama kwenye child yake.
+    return ListenableBuilder(
+      listenable: AppLanguage.instance,
+      builder: (context, _) {
+        return ListenableBuilder(
+          listenable: AppTheme.instance,
+          builder: (context, _) {
+            return MaterialApp(
+              title: 'Pacific Dating App',
+              debugShowCheckedModeBanner: false,
 
-class AuthGate extends StatelessWidget {
-  const AuthGate({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFFFF4B72),
+              // FONT: Poppins — font nzuri, ya kisasa na inasomeka vizuri.
+              // Inatumiwa na screens ZOTE za app kwa default.
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: ColorScheme.fromSeed(
+                  seedColor: const Color(0xFFFF4B72),
+                  brightness: AppTheme.instance.isDark
+                      ? Brightness.dark
+                      : Brightness.light,
+                ),
+                textTheme: GoogleFonts.poppinsTextTheme(),
               ),
-            ),
-          );
-        }
 
-        if (snapshot.hasData && snapshot.data != null) {
-          final String uid = snapshot.data!.uid;
-
-          return StreamBuilder<DocumentSnapshot>(
-            stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-            builder: (context, userSnapshot) {
-              if (userSnapshot.connectionState == ConnectionState.waiting) {
-                return const Scaffold(
-                  body: Center(
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFFF4B72),
-                    ),
-                  ),
+              // FIX: Builder wrapper — navigation stack hairebuild-i
+              // wakati theme/language inabadilika. Hii inaepusha bug ya
+              // kurudishwa welcome screen kila mtumiaji anapobadilisha lugha.
+              builder: (context, child) {
+                return Stack(
+                  children: [
+                    const PresenceTracker(),
+                    child!,
+                  ],
                 );
-              }
-
-              if (userSnapshot.hasData && userSnapshot.data!.exists) {
-                final userData = userSnapshot.data!.data() as Map<String, dynamic>?;
-                if (userData != null && userData['isProfileComplete'] == true) {
-                  return const MainDashboardScreen();
-                }
-              }
-
-              return const WelcomeScreen();
-            },
-          );
-        }
-
-        return const WelcomeScreen();
+              },
+              home: const AuthGate(),
+            );
+          },
+        );
       },
     );
   }
 }
+

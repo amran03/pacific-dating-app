@@ -78,7 +78,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
         'uid': uid,
         'phoneNumber': widget.phoneNumber,
         'authEmail': syntheticEmail,
-        'coins': 100, // Zawadi ya kukaribisha kwa mtumiaji mpya 🎁
+        'coins': 100, // Zawadi ya kukaribisha kwa mtumiaji mpya
         'isProfileComplete': false,
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));

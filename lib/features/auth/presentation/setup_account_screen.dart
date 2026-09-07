@@ -8,6 +8,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/firestore_service.dart';
+import 'package:pacific_dating_app/core/services/validation_service.dart';
+import 'package:pacific_dating_app/core/services/core_error_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 import 'package:pacific_dating_app/screens/pacific_launch_screen.dart';
@@ -68,21 +70,21 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   List<String> get _relationshipGoals {
     if (_selectedGender == "Female") {
       return [
-        "Boyfriend 🕺",
-        "Husband 💍",
-        "Casual Dating 🥂",
-        "Serious Relationship ❤️",
-        "New Friends 🤝",
-        "Not Sure Yet 🤔"
+        "Boyfriend",
+        "Husband",
+        "Casual Dating",
+        "Serious Relationship",
+        "New Friends",
+        "Not Sure Yet"
       ];
     } else {
       return [
-        "Girlfriend 💃",
-        "Wife 💍",
-        "Casual Dating 🥂",
-        "Serious Relationship ❤️",
-        "New Friends 🤝",
-        "Not Sure Yet 🤔"
+        "Girlfriend",
+        "Wife",
+        "Casual Dating",
+        "Serious Relationship",
+        "New Friends",
+        "Not Sure Yet"
       ];
     }
   }
@@ -115,14 +117,14 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           elevation: 10,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text(
-            "Una miaka $age? 🎂",
+            "Una miaka $age?",
             textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: _themeColor),
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: _themeColor),
           ),
           content: const Text(
             "Tafadhali hakikisha umri wako ni sahihi. Maelezo haya yatatumiwa kuonyesha umri wako kwenye profile na huwezi kuyabadilisha baada ya kukamilisha usajili.",
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
+            style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4, fontWeight: FontWeight.w300),
           ),
           actionsAlignment: MainAxisAlignment.spaceAround,
           actions: [
@@ -149,7 +151,10 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? pickedFile = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70, // Compress image to 70% quality to reduce upload size
+    );
     if (pickedFile != null) {
       setState(() {
         _profileImage = File(pickedFile.path);
@@ -158,14 +163,18 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   }
 
   void _nextStep() async {
-    if (_currentStep == 0 && _nameController.text.trim().isEmpty) {
-      _showSnackBar("Tafadhali ingiza jina lako la kwanza kuendelea.");
-      return;
+    if (_currentStep == 0) {
+      final String? error = ValidationService().validateName(_nameController.text);
+      if (error != null) {
+        CoreErrorService().showError(context, error);
+        return;
+      }
     }
 
     if (_currentStep == 1) {
-      if (_selectedBirthDate == null) {
-        _showSnackBar("Tafadhali chagua tarehe yako ya kuzaliwa.");
+      final String? error = ValidationService().validateAge(_selectedBirthDate);
+      if (error != null) {
+        CoreErrorService().showError(context, error);
         return;
       }
       _calculatedAge = _calculateAge(_selectedBirthDate!);
@@ -176,7 +185,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     }
 
     if (_currentStep == 2 && _selectedGender == null) {
-      _showSnackBar("Tafadhali chagua jinsia yako.");
+      CoreErrorService().showError(context, "Tafadhali chagua jinsia yako.");
       return;
     }
 
@@ -184,18 +193,21 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     // plan (billing) ambayo si lazima kwa MVP. Mtumiaji anaweza kuiweka
     // baadaye kwenye Profile Settings.
 
-    if (_currentStep == 4 && _bioController.text.trim().isEmpty) {
-      _showSnackBar("Tafadhali andika maelezo mafupi kukuhusu.");
-      return;
+    if (_currentStep == 4) {
+      final String? error = ValidationService().validateBio(_bioController.text);
+      if (error != null) {
+        CoreErrorService().showError(context, error);
+        return;
+      }
     }
 
     if (_currentStep == 5 && _interestedGender == null) {
-      _showSnackBar("Tafadhali chagua jinsia unayovutiwa nayo.");
+      CoreErrorService().showError(context, "Tafadhali chagua jinsia unayovutiwa nayo.");
       return;
     }
 
     if (_currentStep == 6 && _relationshipGoal == null) {
-      _showSnackBar("Tafadhali chagua aina ya uhusiano unayotafuta.");
+      CoreErrorService().showError(context, "Tafadhali chagua aina ya uhusiano unayotafuta.");
       return;
     }
 
@@ -305,21 +317,17 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             (route) => false,
       );
     } catch (e) {
-      _showSnackBar("Imeshindikana kuhifadhi profile: ${e.toString()}");
+      CoreErrorService().showError(
+        context,
+        CoreErrorService().mapExceptionToMessage(e),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
   void _showSnackBar(String message, {Color color = Colors.redAccent}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    CoreErrorService().showError(context, message, color: color);
   }
 
   @override
@@ -434,16 +442,16 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildNameStep() {
     return _buildStepLayout(
-      title: "Jina Lako la Kwanza? ✍️",
+      title: "Jina Lako la Kwanza?",
       subtitle: "Ingiza jina unalotaka kutumia. Hili ndilo jina kuu litakalotokea kwenye profile yako kwa watu wengine.",
       child: Container(
         decoration: _buildBoxDecoration(),
         child: TextField(
           controller: _nameController,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           decoration: InputDecoration(
             hintText: "Mfano: Baraka, Sophia...",
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.normal),
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontWeight: FontWeight.w300),
             filled: true,
             fillColor: Colors.white,
             prefixIcon: Icon(Icons.person_outline_rounded, color: _themeColor),
@@ -463,7 +471,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildBirthdayStep() {
     return _buildStepLayout(
-      title: "Tarehe ya Kuzaliwa 🎂",
+      title: "Tarehe ya Kuzaliwa",
       subtitle: "Tunatumia tarehe hii kukokotoa umri wako. Watu wengine wataona umri wako pekee (mfano: 24) na sio tarehe kamili ya kuzaliwa.",
       child: InkWell(
         onTap: () async {
@@ -490,7 +498,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 style: TextStyle(
                   fontSize: 17,
                   color: _selectedBirthDate == null ? Colors.grey.shade500 : AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               Icon(Icons.calendar_today_rounded, color: _themeColor, size: 26),
@@ -503,13 +511,13 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildIdentifyAsStep() {
     return _buildStepLayout(
-      title: "Jinsia Yako 👤",
+      title: "Jinsia Yako",
       subtitle: "Chagua jinsia yako ili kusaidia mfumo kukutafutia watu sahihi kulingana na matakwa yako.",
       child: Column(
         children: [
-          _buildGenderTile("Mwanaume (Man) 👨", "Male"),
+          _buildGenderTile("Mwanaume (Man)", "Male"),
           const SizedBox(height: 16),
-          _buildGenderTile("Mwanamke (Woman) 👩", "Female"),
+          _buildGenderTile("Mwanamke (Woman)", "Female"),
         ],
       ),
     );
@@ -561,7 +569,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildAddPhotoStep() {
     return _buildStepLayout(
-      title: "Picha Yako Kuu 📸",
+      title: "Picha Yako Kuu",
       subtitle: "Weka picha inayokuonyesha vizuri sura yako. Picha zenye muonekano mzuri huongeza nafasi ya kupata likes kwa zaidi ya 80%.",
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -622,7 +630,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildDescribeYourselfStep() {
     return _buildStepLayout(
-      title: "Jieleze Kidogo (Bio) 📝",
+      title: "Jieleze Kidogo (Bio)",
       subtitle: "Andika vitu vichache vinavyokuelezea, kama vile mambo unayopenda kufanya, kazi, au aina ya maisha unayopendelea.",
       child: Container(
         decoration: _buildBoxDecoration(),
@@ -652,15 +660,15 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildInterestedGenderStep() {
     return _buildStepLayout(
-      title: "Unavutiwa na Nani? ❤️",
+      title: "Unavutiwa na Nani?",
       subtitle: "Chagua kundi la watu unalotaka lionekane kwenye zoezi lako la ku-swipe na kutafuta marafiki.",
       child: Column(
         children: [
-          _buildSelectableOption("Wanaume (Men) 👨", _interestedGender, (val) => setState(() => _interestedGender = val)),
+          _buildSelectableOption("Wanaume (Men)", _interestedGender, (val) => setState(() => _interestedGender = val)),
           const SizedBox(height: 14),
-          _buildSelectableOption("Wanawake (Women) 👩", _interestedGender, (val) => setState(() => _interestedGender = val)),
+          _buildSelectableOption("Wanawake (Women)", _interestedGender, (val) => setState(() => _interestedGender = val)),
           const SizedBox(height: 14),
-          _buildSelectableOption("Wote (Everyone) 🌈", _interestedGender, (val) => setState(() => _interestedGender = val)),
+          _buildSelectableOption("Wote (Everyone)", _interestedGender, (val) => setState(() => _interestedGender = val)),
         ],
       ),
     );
@@ -668,7 +676,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildRelationshipGoalStep() {
     return _buildStepLayout(
-      title: "Unatafuta Nini Hapa? 🎯",
+      title: "Unatafuta Nini Hapa?",
       subtitle: "Weka wazi dhumuni lako ili ulinganishwe na watu wenye nia na malengo yanayofanana na yako kikamilifu.",
       child: Column(
         children: _relationshipGoals.map((goal) {
@@ -683,7 +691,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildPermissionsStep() {
     return _buildStepLayout(
-      title: "Ruhusa Muhimu 🔔",
+      title: "Ruhusa Muhimu",
       subtitle: "Ruhusu huduma hizi ili tuweze kukuonyesha watu walio karibu na eneo lako na kukujulisha pindi unapopata match mpya.",
       child: Column(
         children: [
@@ -764,11 +772,11 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "Karibu Sana, ${_nameController.text.isNotEmpty ? _nameController.text : 'Mgeni'}! 🎉",
+                    "Karibu Sana, ${_nameController.text.isNotEmpty ? _nameController.text : 'Mgeni'}!",
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 26,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                       color: Colors.white,
                     ),
                   ),
@@ -781,7 +789,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                     ),
                     child: const Text(
                       "Profile Yako Iko Tayari 100%",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
                     ),
                   ),
                 ],
@@ -818,7 +826,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             const SizedBox(height: 20),
 
             Text(
-              "Bonyeza 'Continue' hapo chini kuweka password yako ya mwisho, kisha uanze kuona watu wanaokuzunguka na kuanza safari yako ya mahusiano! 🔥",
+              "Bonyeza 'Continue' hapo chini kuweka password yako ya mwisho, kisha uanze kuona watu wanaokuzunguka na kuanza safari yako ya mahusiano!",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5, fontWeight: FontWeight.w500),
             ),
@@ -843,7 +851,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               title,
               style: const TextStyle(
                 fontSize: 28,
-                fontWeight: FontWeight.w900,
+                fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
                 letterSpacing: -0.5,
               ),
@@ -855,7 +863,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 fontSize: 15,
                 color: AppColors.textSecondary,
                 height: 1.5,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w300,
               ),
             ),
             const SizedBox(height: 28),
@@ -893,7 +901,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               label,
               style: TextStyle(
                 fontSize: 17,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w800,
                 color: isSelected ? _themeColor : AppColors.textPrimary,
               ),
             ),
@@ -929,11 +937,11 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                 const SizedBox(height: 4),
                 Text(
                   subtitle,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3, fontWeight: FontWeight.w300),
                 ),
               ],
             ),
@@ -1003,7 +1011,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         children: [
           Icon(icon, size: 20, color: _themeColor),
           const SizedBox(width: 12),
-          Text("$title: ", style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary)),
+          Text("$title: ", style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textSecondary)),
           Expanded(
             child: Text(
               value,

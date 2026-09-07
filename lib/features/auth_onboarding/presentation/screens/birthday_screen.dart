@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_color.dart';
+import '../../../../core/services/validation_service.dart';
+import '../../../../core/services/core_error_service.dart';
 import 'gender_screen.dart'; // Tutaitengeneza hatua inayofuata
 
 class BirthdayScreen extends StatefulWidget {
@@ -17,7 +19,7 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
       context: context,
       initialDate: DateTime(2002, 1, 1),
       firstDate: DateTime(1950),
-      lastDate: DateTime(2008), // Hakikisha ana miaka 18+
+      lastDate: DateTime.now().subtract(const Duration(days: 18 * 365)), // Dinamiki: lazima awe na miaka 18+
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -112,9 +114,12 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: selectedDate == null
-                      ? null
-                      : () {
+                  onPressed: () {
+                    final String? error = ValidationService().validateAge(selectedDate);
+                    if (error != null) {
+                      CoreErrorService().showError(context, error);
+                      return;
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(

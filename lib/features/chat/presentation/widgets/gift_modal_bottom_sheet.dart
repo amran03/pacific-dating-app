@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/localization/app_language.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/gift_model.dart';
 
 /// Modal ya kutuma zawadi - muundo wa TikTok: tray ya kusogeza kwa mlalo,
@@ -49,11 +51,47 @@ class _GiftSheetContent extends StatefulWidget {
 class _GiftSheetContentState extends State<_GiftSheetContent> {
   String? _sendingGiftId;
   String? _errorMessage;
+  Set<String> _unlockedGifts = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnlockedGifts();
+  }
+
+  Future<void> _loadUnlockedGifts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final unlocked = prefs.getStringList('unlocked_gifts') ?? [];
+      if (mounted) {
+        setState(() => _unlockedGifts = unlocked.toSet());
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _unlockGift(String giftId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final unlocked = prefs.getStringList('unlocked_gifts') ?? [];
+      if (!unlocked.contains(giftId)) {
+        unlocked.add(giftId);
+        await prefs.setStringList('unlocked_gifts', unlocked);
+      }
+      if (mounted) {
+        setState(() => _unlockedGifts = unlocked.toSet());
+      }
+    } catch (_) {}
+  }
+
+  bool _isGiftUnlocked(String giftId) => _unlockedGifts.contains(giftId);
 
   Future<void> _sendGift(GiftModel gift, int currentCoins) async {
     if (_sendingGiftId != null) return; // Zuia kutuma mbili kwa wakati mmoja
 
-    if (currentCoins < gift.coinPrice) {
+    // Check if gift is already unlocked - if so, allow without coin check
+    final isUnlocked = _isGiftUnlocked(gift.id);
+    
+    if (!isUnlocked && currentCoins < gift.coinPrice) {
       setState(() => _errorMessage = "Huna Coins za kutosha kwa ${gift.name}. Nunua Coins zaidi.");
       return;
     }
@@ -67,18 +105,21 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
     final myRef = FirebaseFirestore.instance.collection('users').doc(myUid);
 
     try {
-      // Transaction inahakikisha coins hazipunguzwi chini ya sifuri hata
-      // kama request mbili zikitokea kwa wakati mmoja (atomic).
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final snapshot = await transaction.get(myRef);
-        final int liveCoins = (snapshot.data()?['coins'] ?? 0) as int;
+      // If gift is already unlocked, skip coin deduction
+      if (!isUnlocked) {
+        // Transaction inahakikisha coins hazipunguzwi chini ya sifuri hata
+        // kama request mbili zikitokea kwa wakati mmoja (atomic).
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+          final snapshot = await transaction.get(myRef);
+          final int liveCoins = (snapshot.data()?['coins'] ?? 0) as int;
 
-        if (liveCoins < gift.coinPrice) {
-          throw Exception('INSUFFICIENT_COINS');
-        }
+          if (liveCoins < gift.coinPrice) {
+            throw Exception('INSUFFICIENT_COINS');
+          }
 
-        transaction.update(myRef, {'coins': liveCoins - gift.coinPrice});
-      });
+          transaction.update(myRef, {'coins': liveCoins - gift.coinPrice});
+        });
+      }
 
       // Rekodi zawadi kwa historia
       await FirebaseFirestore.instance.collection('gifts_sent').add({
@@ -103,6 +144,9 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
         'createdAt': FieldValue.serverTimestamp(),
         'read': false,
       });
+
+      // Mark gift as permanently unlocked after successful send
+      await _unlockGift(gift.id);
 
       if (!mounted) return;
       Navigator.pop(context);
@@ -221,74 +265,31 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
 
                   // TikTok-style: tray ya kusogeza kwa MLALO
                   SizedBox(
-                    height: 130,
+                    height: 158,
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
                       itemCount: pasificGifts.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 12),
                       itemBuilder: (context, index) {
                         final gift = pasificGifts[index];
-                        final bool canAfford = myCoins >= gift.coinPrice;
+                        final bool isUnlocked = _isGiftUnlocked(gift.id);
+                        final bool canAfford = isUnlocked || myCoins >= gift.coinPrice;
                         final bool isSending = _sendingGiftId == gift.id;
+                        final bool locked = !canAfford;
 
-                        return GestureDetector(
-                          onTap: canAfford ? () => _sendGift(gift, myCoins) : () {
-                            setState(() => _errorMessage = "Huna Coins za kutosha kwa ${gift.name}.");
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 96,
-                            decoration: BoxDecoration(
-                              gradient: canAfford
-                                  ? const LinearGradient(
-                                colors: [Color(0xFFFFF0F5), Color(0xFFF3E8FF)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              )
-                                  : null,
-                              color: canAfford ? null : Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: canAfford
-                                    ? AppColors.primary.withValues(alpha: 0.3)
-                                    : Colors.grey.shade300,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                isSending
-                                    ? const SizedBox(
-                                  width: 32,
-                                  height: 32,
-                                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.primary),
-                                )
-                                    : Opacity(
-                                  opacity: canAfford ? 1.0 : 0.4,
-                                  child: Text(gift.emoji, style: const TextStyle(fontSize: 38)),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  gift.name,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
-                                    color: canAfford ? Colors.black87 : Colors.grey,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  "🪙 ${gift.coinPrice}",
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: canAfford ? Colors.grey.shade700 : Colors.grey.shade400,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                        return _GiftCard(
+                          gift: gift,
+                          canAfford: canAfford,
+                          isUnlocked: isUnlocked,
+                          isSending: isSending,
+                          index: index,
+                          onTap: canAfford
+                              ? () => _sendGift(gift, myCoins)
+                              : () {
+                                  setState(() => _errorMessage =
+                                      "Huna Coins za kutosha kwa ${gift.name}.");
+                                },
                         );
                       },
                     ),
@@ -297,6 +298,283 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// GIFT CARD — impressive tier-styled card:
+//  - staggered entrance animation (scale + fade, kila card inachelewa)
+//  - premium : gradient ya rangi ya zawadi + glow
+//  - luxury  : glow inayopulsa (repeat) + border ya mwanga + tag "VIP"
+//  - locked  : dim + chip ya lock (huna coins)
+// ============================================================
+
+class _GiftCard extends StatefulWidget {
+  final GiftModel gift;
+  final bool canAfford;
+  final bool isUnlocked;
+  final bool isSending;
+  final int index;
+  final VoidCallback onTap;
+
+  const _GiftCard({
+    required this.gift,
+    required this.canAfford,
+    required this.isUnlocked,
+    required this.isSending,
+    required this.index,
+    required this.onTap,
+  });
+
+  @override
+  State<_GiftCard> createState() => _GiftCardState();
+}
+
+class _GiftCardState extends State<_GiftCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _glowController;
+  bool _entered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+      lowerBound: 0.0,
+      upperBound: 1.0,
+      value: 0.5,
+    );
+
+    // Staggered entrance: kila card inaingia na uchelewa kidogo.
+    Future.delayed(Duration(milliseconds: 90 * widget.index), () {
+      if (mounted) setState(() => _entered = true);
+    });
+
+    // Luxury tu ndiyo ina pulse ya kudumu (performance-friendly).
+    if (widget.gift.isLuxury) {
+      _glowController.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _glowController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildCardInner(GiftModel gift, bool locked, double glow) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Tier tag kwa luxury/premium
+        if (!locked && (gift.isLuxury || gift.isPremium))
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 2,
+            ),
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  gift.glowColor,
+                  gift.glowColor.withOpacity(0.7),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              gift.isLuxury ? "VIP" : "PRO",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ),
+
+        // Emoji au spinner wakati wa kutuma
+        widget.isSending
+            ? const SizedBox(
+                width: 34,
+                height: 34,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppColors.primary,
+                ),
+              )
+            : Transform.scale(
+                scale: gift.isLuxury ? 1.0 + 0.08 * _glowController.value : 1.0,
+                child: Opacity(
+                  opacity: locked ? 0.35 : 1.0,
+                  child: Text(
+                    gift.emoji,
+                    style: const TextStyle(fontSize: 42),
+                  ),
+                ),
+              ),
+
+        const SizedBox(height: 6),
+
+        // Jina (au lock/unlock chip)
+        locked
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.lock_rounded,
+                    size: 12,
+                    color: Colors.grey.shade500,
+                  ),
+                  const SizedBox(width: 3),
+                  Flexible(
+                    child: Text(
+                      "Locked",
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11.5,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : widget.isUnlocked
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.lock_open_rounded,
+                        size: 12,
+                        color: AppColors.success,
+                      ),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          "Unlocked",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11.5,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Text(
+                    gift.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+
+        const SizedBox(height: 3),
+
+        // Price pill
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 2,
+          ),
+          decoration: BoxDecoration(
+            color: locked
+                ? Colors.grey.shade200
+                : widget.isUnlocked
+                    ? AppColors.success.withOpacity(0.16)
+                    : AppColors.coinGold.withOpacity(0.16),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            widget.isUnlocked ? "✓ Unlocked" : "🪙 ${gift.coinPrice}",
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: locked
+                  ? Colors.grey.shade500
+                  : widget.isUnlocked
+                      ? AppColors.success
+                      : AppColors.coinGoldDark,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final gift = widget.gift;
+    final bool locked = !widget.canAfford;
+
+    // Glow intensity: luxury inapulsa, premium ni static glow ndogo.
+    final double glow = gift.isLuxury
+        ? 0.35 + 0.35 * _glowController.value
+        : (gift.isPremium ? 0.28 : 0.12);
+
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: AnimatedScale(
+        scale: _entered ? 1.0 : 0.6,
+        duration: const Duration(milliseconds: 380),
+        curve: Curves.easeOutBack,
+        child: AnimatedOpacity(
+          opacity: _entered ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 380),
+          child: AnimatedBuilder(
+            animation: _glowController,
+            builder: (context, child) {
+              return Container(
+                width: 100,
+                decoration: BoxDecoration(
+                  gradient: locked
+                      ? null
+                      : LinearGradient(
+                          colors: [
+                            gift.glowColor.withOpacity(0.16),
+                            gift.glowColor.withOpacity(0.05),
+                            Colors.white,
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                  color: locked ? Colors.grey.shade100 : null,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: locked
+                        ? Colors.grey.shade300
+                        : gift.isLuxury
+                            ? gift.glowColor.withOpacity(glow)
+                            : gift.glowColor.withOpacity(0.3),
+                    width: gift.isLuxury ? 2 : 1.5,
+                  ),
+                  boxShadow: locked
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: gift.glowColor.withOpacity(glow),
+                            blurRadius: gift.isLuxury ? 22 : 12,
+                            spreadRadius: gift.isLuxury ? 2 : 0,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
+                ),
+                child: _buildCardInner(gift, locked, glow),
+              );
+            },
+          ),
         ),
       ),
     );

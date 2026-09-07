@@ -4,6 +4,7 @@ import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
+import 'package:pacific_dating_app/features/profile/presentation/widgets/profile_image_with_ring.dart';
 import 'package:pacific_dating_app/features/chat/presentation/individual_chat_screen.dart';
 
 /// Inaonyesha profile KAMILI ya mtumiaji MWINGINE (sio ya mwenyewe).
@@ -59,7 +60,7 @@ class PublicProfileScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Fungua Mazungumzo 🔒"),
+        title: const Text("Fungua Mazungumzo"),
         content: Text(
           "${user.name} anahitaji Coins $price kufungua mazungumzo naye kwa mara ya kwanza. Baada ya hapo mtaweza kuongea bila malipo tena.",
         ),
@@ -71,7 +72,7 @@ class PublicProfileScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: Text("Lipa 🪙 $price", style: const TextStyle(color: Colors.white)),
+            child: Text("Lipa $price", style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -114,6 +115,19 @@ class PublicProfileScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Color _getTierColor(String tier) {
+    switch (tier) {
+      case 'bronze':
+        return const Color(0xFFCD7F32);
+      case 'gold':
+        return const Color(0xFFFFD700);
+      case 'diamond':
+        return const Color(0xFFB9F2FF);
+      default:
+        return Colors.transparent;
+    }
   }
 
   @override
@@ -173,10 +187,22 @@ class PublicProfileScreen extends StatelessWidget {
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
-                            colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
+                            colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             stops: const [0.5, 1.0],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 120,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: ProfileImageWithRing(
+                            imageUrl: imageUrl,
+                            badgeTier: user.badgeTier,
+                            size: 120,
                           ),
                         ),
                       ),
@@ -192,9 +218,26 @@ class PublicProfileScreen extends StatelessWidget {
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 28,
-                                fontWeight: FontWeight.w900,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
+                            if (user.badgeTier != 'none')
+                              Container(
+                                margin: const EdgeInsets.only(left: 10),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: _getTierColor(user.badgeTier),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  user.badgeTier.toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
                             if (user.location != null && user.location!.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
@@ -221,7 +264,7 @@ class PublicProfileScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (user.bio != null && user.bio!.isNotEmpty) ...[
-                        const Text("Kuhusu Yangu", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const Text("Kuhusu Yangu", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                         const SizedBox(height: 8),
                         Text(user.bio!, style: const TextStyle(color: Colors.black87, height: 1.5)),
                         const SizedBox(height: 24),
@@ -252,7 +295,7 @@ class PublicProfileScreen extends StatelessWidget {
 
                       if (user.interests.isNotEmpty) ...[
                         const SizedBox(height: 24),
-                        const Text("Mapendeleo", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const Text("Mapendeleo", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                         const SizedBox(height: 10),
                         Wrap(
                           spacing: 8,
@@ -281,7 +324,7 @@ class PublicProfileScreen extends StatelessWidget {
                               Icon(Icons.lock_outline_rounded, size: 14, color: Colors.grey.shade600),
                               const SizedBox(width: 6),
                               Text(
-                                "Kufungua chat: 🪙 ${user.chatUnlockPrice} Coins (mara moja tu)",
+                                "Kufungua chat: ${user.chatUnlockPrice} Coins (mara moja tu)",
                                 style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                               ),
                             ],
@@ -296,7 +339,7 @@ class PublicProfileScreen extends StatelessWidget {
                           icon: const Icon(Icons.chat_bubble_rounded, color: Colors.white),
                           label: Text(
                             user.chatUnlockPrice > 0 ? "Tuma Ujumbe (🪙 ${user.chatUnlockPrice})" : "Tuma Ujumbe",
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
@@ -320,9 +363,9 @@ class PublicProfileScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
+        color: AppColors.primary.withOpacity(0.1),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+        border: Border.all(color: AppColors.primary.withOpacity(0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

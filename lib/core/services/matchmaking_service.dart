@@ -87,6 +87,7 @@ class MatchmakingService {
 
   /// Pata watumiaji wapya wa kuonyesha kwenye Discover: si mimi mwenyewe,
   /// na sijawahi kumu-swipe (like wala pass) hapo awali.
+  /// VIP members (Diamond > Gold > Bronze) wanapewa kipaumbele kuonekana kwanza.
   Future<List<UserModel>> fetchDiscoverableUsers({int limit = 15}) async {
     final swipedSnap = await _db
         .collection('swipes')
@@ -96,17 +97,34 @@ class MatchmakingService {
 
     final excludedUids = swipedSnap.docs.map((d) => d.id).toSet()..add(_myUid);
 
+    // Tunachukua pool kubwa kidogo ili tuweze kupanga VIP kwanza
     final usersSnap = await _db
         .collection('users')
         .where('isProfileComplete', isEqualTo: true)
-        .limit(limit + excludedUids.length)
+        .limit(limit * 5 + excludedUids.length)
         .get();
 
-    return usersSnap.docs
+    final List<UserModel> candidates = usersSnap.docs
         .where((doc) => !excludedUids.contains(doc.id))
         .map((doc) => UserModel.fromMap(doc.data()))
-        .take(limit)
         .toList();
+
+    // Priority map for sorting
+    final Map<String, int> tierPriority = {
+      'diamond': 3,
+      'gold': 2,
+      'bronze': 1,
+      'none': 0,
+    };
+
+    // Sort: Higher priority first
+    candidates.sort((a, b) {
+      final pA = tierPriority[a.badgeTier] ?? 0;
+      final pB = tierPriority[b.badgeTier] ?? 0;
+      return pB.compareTo(pA);
+    });
+
+    return candidates.take(limit).toList();
   }
 
   /// Rekodi like au pass kwa mtumiaji fulani. Inarudisha `true` kama
@@ -279,16 +297,22 @@ class MatchmakingService {
         .where('action', isEqualTo: 'like')
         .snapshots()
         .asyncMap((snap) async {
-      final List<UserModel> likedByUsers = [];
-
+      final List<String> uids = [];
       for (final doc in snap.docs) {
         final String? fromUid = doc.reference.parent.parent?.id;
-        if (fromUid == null || fromUid == _myUid) continue;
-
-        final userDoc = await _db.collection('users').doc(fromUid).get();
-        if (userDoc.exists && userDoc.data() != null) {
-          likedByUsers.add(UserModel.fromMap(userDoc.data()!));
+        if (fromUid != null && fromUid != _myUid) {
+          uids.add(fromUid);
         }
+      }
+
+      if (uids.isEmpty) return [];
+
+      // Firestore whereIn limit is 30. Chunking the UIDs to handle more.
+      final List<UserModel> likedByUsers = [];
+      for (var i = 0; i < uids.length; i += 30) {
+        final chunk = uids.sublist(i, i + 30 > uids.length ? uids.length : i + 30);
+        final userSnap = await _db.collection('users').where(FieldPath.documentId, whereIn: chunk).get();
+        likedByUsers.addAll(userSnap.docs.map((doc) => UserModel.fromMap(doc.data())));
       }
       return likedByUsers;
     });
@@ -320,6 +344,8 @@ class MatchmakingService {
         .snapshots()
         .asyncMap((snap) async {
       final List<ChatModel> chats = [];
+      final List<String> otherUids = [];
+      final List<Map<String, dynamic>> roomData = [];
 
       for (final doc in snap.docs) {
         final data = doc.data();
@@ -328,11 +354,30 @@ class MatchmakingService {
             .cast<String>()
             .firstWhere((uid) => uid != _myUid, orElse: () => '');
 
-        if (otherUid.isEmpty) continue;
+        if (otherUid.isNotEmpty) {
+          otherUids.add(otherUid);
+          roomData.add(data);
+        }
+      }
 
-        final userDoc = await _db.collection('users').doc(otherUid).get();
-        if (!userDoc.exists || userDoc.data() == null) continue;
-        final userData = userDoc.data()!;
+      if (otherUids.isEmpty) return [];
+
+      // Batch fetch user profiles using whereIn (limit 30)
+      final Map<String, Map<String, dynamic>> userProfiles = {};
+      for (var i = 0; i < otherUids.length; i += 30) {
+        final chunk = otherUids.sublist(i, i + 30 > otherUids.length ? otherUids.length : i + 30);
+        final userSnap = await _db.collection('users').where(FieldPath.documentId, whereIn: chunk).get();
+        for (final doc in userSnap.docs) {
+          userProfiles[doc.id] = doc.data();
+        }
+      }
+
+      for (var i = 0; i < otherUids.length; i++) {
+        final otherUid = otherUids[i];
+        final data = roomData[i];
+        final userData = userProfiles[otherUid];
+
+        if (userData == null) continue;
 
         final Timestamp? lastMsgTs = data['lastMessageAt'] as Timestamp?;
         final String lastMessage = (data['lastMessage'] ?? '').toString();
@@ -346,7 +391,6 @@ class MatchmakingService {
               : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
           lastMessage: lastMessage.isEmpty ? 'Anzeni mazungumzo! 👋' : lastMessage,
           timeSent: _formatTimeAgo(lastMsgTs?.toDate()),
-          // Phase 4: mfumo wa coins/timer wa ku-lock chat utaongezwa hapa.
           isLocked: false,
         ));
       }

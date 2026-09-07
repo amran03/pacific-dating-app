@@ -13,6 +13,15 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Fonts nzuri (Poppins) kupitia Google Fonts
+  google_fonts: ^6.2.1
+
+  # Kuhifadhi lugha iliyochaguliwa (EN/SW) ndani ya device
+  shared_preferences: ^2.3.2
+
+  # Supabase
+  supabase_flutter: ^2.8.3
+
   # Firebase
   firebase_core: ^3.12.1
   firebase_auth: ^5.5.1
@@ -44,6 +53,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/images/
 
 # Usanidi wa App Icon (Weka picha yako kwenye assets/images/app_icon.png)
 flutter_launcher_icons:

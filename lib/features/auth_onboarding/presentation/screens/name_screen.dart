@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_color.dart';
+import '../../../../core/services/validation_service.dart';
+import '../../../../core/services/core_error_service.dart';
 import 'birthday_screen.dart'; // Tutaitengeneza hatua inayofuata
 
 class NameScreen extends StatefulWidget {
@@ -82,14 +84,17 @@ class _NameScreenState extends State<NameScreen> {
                 height: 56,
                 child: ElevatedButton(
                   onPressed: () {
-                    if (_nameController.text.trim().isNotEmpty) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const BirthdayScreen(),
-                        ),
-                      );
+                    final String? error = ValidationService().validateName(_nameController.text);
+                    if (error != null) {
+                      CoreErrorService().showError(context, error);
+                      return;
                     }
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const BirthdayScreen(),
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,

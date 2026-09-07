@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      _showMessage("Umeingia kikamilifu! 🎉", Colors.green);
+      _showMessage("Umeingia kikamilifu!", Colors.green);
 
       // Tumetumia MainDashboardScreen kulingana na jina la faili na class
       Navigator.pushAndRemoveUntil(
@@ -104,10 +104,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Title Header
               const Text(
-                "Karibu Tena! 👋",
+                "Karibu Tena!",
                 style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
                   color: AppColors.textPrimary,
                 ),
               ),
@@ -115,7 +116,9 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text(
                 "Ingiza namba yako ya simu na password kuendelea.",
                 style: TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w300,
+                  height: 1.5,
                   color: AppColors.textSecondary,
                 ),
               ),

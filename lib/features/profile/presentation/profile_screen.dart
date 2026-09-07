@@ -1,18 +1,22 @@
 import 'dart:io';
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+
 import '../../../core/constants/app_color.dart';
 import '../data/user_model.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
-// Hakikisha umeunganisha UserModel yako (Badilisha path kama ipo sehemu tofauti)
-// Badala ya "profile_setting.dart", hakikisha jina linaendana na faili lako
+
 import 'screens/profile_setting.dart';
 import 'screens/privacy_policy_screen.dart';
 import 'screens/buy_coins_screen.dart';
+import 'screens/badge_store_screen.dart';
+import 'screens/settings_screen.dart';
+import 'widgets/profile_image_with_ring.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -49,7 +53,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Picha ya profile imebadilishwa! 📸"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("Picha ya profile imebadilishwa!"), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -105,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Delete Account", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+        title: const Text("Delete Account", style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red)),
         content: const Text("Onyo! Kitendo hiki kitafuta kabisa akaunti yako na taarifa zote. Huwezi kuzirejesha tena."),
         actions: [
           TextButton(
@@ -302,7 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         "My Profile",
                         style: TextStyle(
                           color: Colors.black87,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w800,
                           fontSize: 22,
                         ),
                       ),
@@ -351,9 +355,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       child: Stack(
                                         alignment: Alignment.center,
                                         children: [
-                                          CircleAvatar(
-                                            radius: 35,
-                                            backgroundImage: NetworkImage(photoUrl),
+                                          ProfileImageWithRing(
+                                            imageUrl: photoUrl,
+                                            badgeTier: me?.badgeTier ?? 'none',
+                                            size: 70,
                                           ),
                                           if (_isUploadingPhoto)
                                             Container(
@@ -396,7 +401,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           displayName,
                                           style: const TextStyle(
                                             fontSize: 20,
-                                            fontWeight: FontWeight.bold,
+                                            fontWeight: FontWeight.w800,
                                             color: Colors.black87,
                                           ),
                                         ),
@@ -406,6 +411,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           style: TextStyle(
                                             fontSize: 13,
                                             color: Colors.grey.shade600,
+                                            fontWeight: FontWeight.w300,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
@@ -497,6 +503,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               title: "Account & Preferences",
                               items: [
                                 _buildMenuItem(
+                                  icon: Icons.tune_rounded,
+                                  color: Colors.deepPurple,
+                                  title: _lang.t('App Settings', sw: 'Mipangilio ya App'),
+                                  subtitle: _lang.t('Language, Dark Mode, Privacy & more', sw: 'Lugha, Mode Nyeusi, Faragha na zaidi'),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      FadeSlideRoute(page: const SettingsScreen()),
+                                    );
+                                  },
+                                ),
+                                _buildMenuItem(
                                   icon: Icons.settings_rounded,
                                   color: Colors.blue,
                                   title: "Profile Settings",
@@ -506,6 +524,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       context,
                                       // Hapa lazima iwe jina sahihi la class iliyopo kwenye "profile_setting.dart"
                                       MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                                    ).then((_) {
+                                      setState(() {});
+                                    });
+                                  },
+                                ),
+                                _buildMenuItem(
+                                  icon: Icons.tune_rounded,
+                                  color: Colors.teal,
+                                  title: "App Settings",
+                                  subtitle: "Lugha, Mwangaza, Arifa, Na Matakazo",
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const SettingsScreen()),
+                                    );
+                                  },
+                                ),
+                                _buildMenuItem(
+                                  icon: Icons.workspace_premium_rounded,
+                                  color: AppColors.coinGold,
+                                  title: "VIP Badges",
+                                  subtitle: "Nunua Bronze, Gold au Diamond badge",
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const BadgeStoreScreen(),),
                                     ).then((_) {
                                       setState(() {});
                                     });
@@ -570,7 +614,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.only(left: 4, bottom: 8),
           child: Text(
             title,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Colors.black54),
           ),
         ),
         Container(
@@ -624,12 +668,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87),
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.black87),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w300),
                     ),
                   ],
                 ),

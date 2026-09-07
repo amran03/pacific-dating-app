@@ -23,6 +23,10 @@ class UserModel {
   final double? longitude;
   final String? fcmToken;
   final int coins;
+  // Badge Tier for VIP status: 'none', 'bronze', 'gold', 'diamond'
+  final String badgeTier;
+  // Total coins spent by the user (for rewarding high spenders)
+  final int totalSpentCoins;
   // Fields za ziada zinazofanana na dating apps nyingine
   final int? heightCm;
   final String? education;
@@ -54,6 +58,8 @@ class UserModel {
     this.longitude,
     this.fcmToken,
     this.coins = 0,
+    this.badgeTier = 'none',
+    this.totalSpentCoins = 0,
     this.heightCm,
     this.education,
     this.occupation,
@@ -86,6 +92,8 @@ class UserModel {
       'longitude': longitude,
       'fcmToken': fcmToken,
       'coins': coins,
+      'badgeTier': badgeTier,
+      'totalSpentCoins': totalSpentCoins,
       'heightCm': heightCm,
       'education': education,
       'occupation': occupation,
@@ -119,6 +127,8 @@ class UserModel {
       longitude: (map['longitude'] as num?)?.toDouble(),
       fcmToken: map['fcmToken'],
       coins: map['coins'] ?? 0,
+      badgeTier: map['badgeTier'] ?? 'none',
+      totalSpentCoins: map['totalSpentCoins'] ?? 0,
       heightCm: map['heightCm'],
       education: map['education'],
       occupation: map['occupation'],
@@ -148,6 +158,8 @@ class UserModel {
     double? longitude,
     String? fcmToken,
     int? coins,
+    String? badgeTier,
+    int? totalSpentCoins,
     int? heightCm,
     String? education,
     String? occupation,
@@ -176,6 +188,8 @@ class UserModel {
       longitude: longitude ?? this.longitude,
       fcmToken: fcmToken ?? this.fcmToken,
       coins: coins ?? this.coins,
+      badgeTier: badgeTier ?? this.badgeTier,
+      totalSpentCoins: totalSpentCoins ?? this.totalSpentCoins,
       heightCm: heightCm ?? this.heightCm,
       education: education ?? this.education,
       occupation: occupation ?? this.occupation,

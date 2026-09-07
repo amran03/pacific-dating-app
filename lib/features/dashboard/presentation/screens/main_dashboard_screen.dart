@@ -81,6 +81,12 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
         showUnselectedLabels: true,
+        elevation: 12,
+        selectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+        unselectedLabelStyle: const TextStyle(fontSize: 11.5),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.explore_rounded),
@@ -285,6 +291,125 @@ class NotificationScreen extends StatelessWidget {
   }
 }
 
+// --- CHAT ACCESS BUTTON ---
+class ChatAccessButton extends StatefulWidget {
+  final String uid;
+  final String name;
+  final String image;
+
+  const ChatAccessButton({
+    super.key,
+    required this.uid,
+    required this.name,
+    required this.image,
+  });
+
+  @override
+  State<ChatAccessButton> createState() => _ChatAccessButtonState();
+}
+
+class _ChatAccessButtonState extends State<ChatAccessButton> {
+  final MatchmakingService _matchmakingService = MatchmakingService();
+  late Future<Map<String, dynamic>> _accessFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _accessFuture = _matchmakingService.getChatAccessInfo(widget.uid);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _accessFuture,
+      builder: (context, snapshot) {
+        final bool isUnlocked = snapshot.data?['unlocked'] ?? false;
+        final int price = snapshot.data?['price'] ?? 0;
+        final bool canChat = isUnlocked || price <= 0;
+
+        return GestureDetector(
+          onTap: () {
+            if (canChat) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => IndividualChatScreen(
+                    chat: ChatModel(
+                      id: widget.uid,
+                      name: widget.name,
+                      avatarUrl: widget.image,
+                      lastMessage: '',
+                      timeSent: '',
+                    ),
+                  ),
+                ),
+              );
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PublicProfileScreen(uid: widget.uid),
+                ),
+              );
+            }
+          },
+          child: Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: canChat
+                  ? const LinearGradient(
+                      colors: [Color(0xFF11998E), Color(0xFF38EF7D)],
+                    )
+                  : LinearGradient(
+                      colors: [Colors.grey.shade700, Colors.grey.shade900],
+                    ),
+              boxShadow: [
+                BoxShadow(
+                  color: (canChat ? Colors.green : Colors.black).withValues(alpha: 0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  canChat ? Icons.chat_bubble_rounded : Icons.lock_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+                if (!canChat && price > 0)
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.amber,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        "$price",
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 // --- DISCOVER TAB ---
 class DiscoverTab extends StatefulWidget {
   const DiscoverTab({super.key});
@@ -299,12 +424,17 @@ class _DiscoverTabState extends State<DiscoverTab> {
   bool _isDragging = false;
   bool _isLoading = true;
   bool _isProcessingSwipe = false;
+  bool _isLoadingMore = false;
 
   final MatchmakingService _matchmakingService = MatchmakingService();
 
   // Data halisi ya watumiaji kutoka Firestore (imejazwa kwenye initState).
   // Muundo wa Map umebaki sawa na ule wa awali ili UI isibadilike.
   List<Map<String, dynamic>> _profiles = [];
+
+  // INFINITE SWIPE: profiles zilizoshakuwa swiped - zinatumika kuzungusha
+  // (recycle) swipe zikishaisha watu halisi wote, ili stack zisiishe kamwe.
+  final List<Map<String, dynamic>> _swipedProfiles = [];
 
   @override
   void initState() {
@@ -323,37 +453,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
       await _matchmakingService.fetchDiscoverableUsers();
 
       setState(() {
-        _profiles = users
-            .map((u) {
-          String locationLabel = "Tanzania";
-
-          if (me?.latitude != null &&
-              me?.longitude != null &&
-              u.latitude != null &&
-              u.longitude != null) {
-            final double distanceKm = MatchmakingService.calculateDistanceKm(
-              me!.latitude!,
-              me.longitude!,
-              u.latitude!,
-              u.longitude!,
-            );
-            locationLabel = distanceKm < 1
-                ? "Chini ya 1km"
-                : "${distanceKm.toStringAsFixed(0)}km";
-          }
-
-          return {
-            'uid': u.uid,
-            'name': u.name,
-            'age': u.age,
-            'location': locationLabel,
-            'image': (u.profileImageUrl != null && u.profileImageUrl!.isNotEmpty)
-                ? u.profileImageUrl!
-                : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
-            'isMatched': false,
-          };
-        })
-            .toList();
+        _profiles = _mapUsersToProfiles(users, me);
         _topCardIndex = 0;
         _isLoading = false;
       });
@@ -365,6 +465,86 @@ class _DiscoverTabState extends State<DiscoverTab> {
         );
       }
     }
+  }
+
+  /// INFINITE SWIPE: Inapakia watumiaji wapya kwenye stack KWA BACKGROUND,
+  /// bila mtumiaji kusimama kusubiri. Kama watumiaji wote waliopo kwenye
+  /// Firestore wameisha (hakuna mpya), tunarudisha (recycle) wale
+  /// walioshakuwa swiped kwa mpangilio mpya - swipe zisiishe kamwe.
+  Future<void> _loadMoreUsers() async {
+    if (_isLoadingMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final UserModel? me = await _matchmakingService.fetchMyProfile();
+
+      final List<UserModel> users =
+      await _matchmakingService.fetchDiscoverableUsers();
+
+      final knownUids = _profiles
+          .map((p) => p['uid'] as String?)
+          .whereType<String>()
+          .toSet();
+
+      final List<Map<String, dynamic>> fresh =
+      _mapUsersToProfiles(users, me)
+          .where((p) => !knownUids.contains(p['uid']))
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          if (fresh.isNotEmpty) {
+            _profiles.addAll(fresh);
+          } else if (_swipedProfiles.isNotEmpty) {
+            // RECYCLE: changanya waliopita ili mtumiaji aendelee kupiga
+            // swipe bila mwisho (behavior ya pro dating apps).
+            final List<Map<String, dynamic>> recycled =
+            [..._swipedProfiles]..shuffle();
+            _profiles.addAll(recycled);
+          }
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  List<Map<String, dynamic>> _mapUsersToProfiles(
+      List<UserModel> users,
+      UserModel? me,
+      ) {
+    return users
+        .map((u) {
+      String locationLabel = "Tanzania";
+
+      if (me?.latitude != null &&
+          me?.longitude != null &&
+          u.latitude != null &&
+          u.longitude != null) {
+        final double distanceKm = MatchmakingService.calculateDistanceKm(
+          me!.latitude!,
+          me.longitude!,
+          u.latitude!,
+          u.longitude!,
+        );
+        locationLabel = distanceKm < 1
+            ? "Chini ya 1km"
+            : "${distanceKm.toStringAsFixed(0)}km";
+      }
+
+      return {
+        'uid': u.uid,
+        'name': u.name,
+        'age': u.age,
+        'location': locationLabel,
+        'image': (u.profileImageUrl != null && u.profileImageUrl!.isNotEmpty)
+            ? u.profileImageUrl!
+            : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
+        'isMatched': false,
+        'chatUnlockPrice': u.chatUnlockPrice ?? 0,
+      };
+    })
+        .toList();
   }
 
   /// isLike=true (swipe juu / gift) -> Like halisi. isLike=false (swipe
@@ -396,10 +576,18 @@ class _DiscoverTabState extends State<DiscoverTab> {
       if (!mounted) return;
       setState(() {
         if (_profiles.isNotEmpty && _topCardIndex < _profiles.length) {
-          _profiles.removeAt(_topCardIndex);
+          // INFINITE SWIPE: tunahifadhi profile iliyopita kwa ajili ya
+          // recycle — swipe hazisishi kamwe.
+          _swipedProfiles.add(_profiles.removeAt(_topCardIndex));
         }
         _dragOffset = Offset.zero;
       });
+
+      // Stack ikianza kuwa ndogo (cards ≤ 3 zilizobaki), pakia wapya
+      // BACKGROUND bila mtumiaji kuona loading ya kusimamisha.
+      if (_profiles.length - _topCardIndex <= 3) {
+        _loadMoreUsers();
+      }
     });
   }
 
@@ -419,11 +607,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("🎉", style: TextStyle(fontSize: 60)),
+                const SizedBox(height: 10),
                 const SizedBox(height: 10),
                 const Text(
                   "Umepata Match!",
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.primary),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppColors.primary),
                 ),
                 const SizedBox(height: 8),
                 Container(
@@ -467,7 +655,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       backgroundColor: AppColors.primary,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    child: const Text("Anza Kuongea 💬", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: const Text("Anza Kuongea", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 TextButton(
@@ -536,7 +724,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            "Umemtumia $recipientName ${gift.name} kikamilifu 🎉",
+                            "Umemtumia $recipientName ${gift.name} kikamilifu",
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: Colors.grey, fontSize: 14),
                           ),
@@ -693,14 +881,153 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     curve: Curves.easeOutCubic,
                     transform: Matrix4.translationValues(0, _dragOffset.dy, 0)
                       ..rotateZ(_dragOffset.dy * 0.0003),
-                    child: _buildCardUI(_profiles[_topCardIndex], isFront: true),
+                    child: Stack(
+                      children: [
+                        _buildCardUI(_profiles[_topCardIndex], isFront: true),
+
+                        // LIKE / PASS stamps — zinaonekana unapovuta kadi
+                        // (pro touch ya dating apps kama Tinder).
+                        IgnorePointer(
+                          child: _buildDragStamps(dragProgress),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
+
+              // INFINITE SWIPE: indicator ndogo inayoonyesha profile mpya
+              // zinapakia background — mtumiaji hajui, anaendelea kupiga.
+              if (_isLoadingMore)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 10,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.65),
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                          SizedBox(width: 10),
+                          Text(
+                            "Inaleta watumiaji wapya...",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  /// LIKE / PASS stamps zinazoonekana wakati wa kuvuta kadi (vertical).
+  Widget _buildDragStamps(double dragProgress) {
+    final double likeOpacity =
+        ((-dragProgress - 0.2) / 0.45).clamp(0.0, 1.0);
+    final double passOpacity =
+        ((dragProgress - 0.2) / 0.45).clamp(0.0, 1.0);
+
+    Widget stamp({
+      required String label,
+      required IconData icon,
+      required Color color,
+      required double opacity,
+      required double rotation,
+    }) {
+      return Opacity(
+        opacity: opacity,
+        child: Transform.rotate(
+          angle: rotation,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.5),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: Colors.white, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Stack(
+      children: [
+        if (likeOpacity > 0)
+          Positioned(
+            top: 44,
+            left: 28,
+            child: stamp(
+              label: "LIKE",
+              icon: Icons.favorite_rounded,
+              color: AppColors.success,
+              opacity: likeOpacity,
+              rotation: -0.22,
+            ),
+          ),
+        if (passOpacity > 0)
+          Positioned(
+            top: 44,
+            right: 28,
+            child: stamp(
+              label: "PASS",
+              icon: Icons.close_rounded,
+              color: AppColors.error,
+              opacity: passOpacity,
+              rotation: 0.22,
+            ),
+          ),
+      ],
     );
   }
 
@@ -764,7 +1091,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 30,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -789,7 +1116,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     const SizedBox(width: 6),
                     Text(
                       profile['location'],
-                      style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w500),
+                      style: const TextStyle(color: Colors.white70, fontSize: 15, fontWeight: FontWeight.w300),
                     ),
                   ],
                 ),
@@ -818,16 +1145,20 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                 ),
                               ],
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text("🎁", style: TextStyle(fontSize: 28)),
-                                SizedBox(width: 10),
-                                Text(
+                                const Icon(
+                                  Icons.card_giftcard_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
+                                const SizedBox(width: 10),
+                                const Text(
                                   "Send Gift",
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.w900,
+                                    fontWeight: FontWeight.w800,
                                     fontSize: 18,
                                   ),
                                 ),
@@ -837,43 +1168,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      GestureDetector(
-                        onTap: () {
-                          if (!isMatched) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Chat ipo locked! Inahitaji muwe mmematch au utume zawadi kwanza. 🔒"),
-                                backgroundColor: Colors.orange,
-                              ),
-                            );
-                          }
-                        },
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: isMatched
-                                ? const LinearGradient(
-                              colors: [Color(0xFF11998E), Color(0xFF38EF7D)],
-                            )
-                                : LinearGradient(
-                              colors: [Colors.grey.shade700, Colors.grey.shade900],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (isMatched ? Colors.green : Colors.black).withValues(alpha: 0.4),
-                                blurRadius: 12,
-                                offset: const Offset(0, 5),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            isMatched ? Icons.chat_bubble_rounded : Icons.lock_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                        ),
+                      ChatAccessButton(
+                        uid: profile['uid'],
+                        name: profile['name'],
+                        image: profile['image'],
                       ),
                     ],
                   ),
