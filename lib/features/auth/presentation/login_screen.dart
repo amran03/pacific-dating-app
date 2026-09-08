@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/services/auth_errors.dart';
 import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/reset_password_screen.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
@@ -49,7 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
             (route) => false,
       );
     } on AuthException catch (e) {
-      _showMessage(e.message, Colors.redAccent);
+      _showMessage(friendlyAuthError(e), Colors.redAccent);
     } catch (e) {
       _showMessage("Kosa: ${e.toString()}", Colors.redAccent);
     } finally {

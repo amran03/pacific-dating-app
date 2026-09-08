@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/services/auth_errors.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -39,7 +40,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text(friendlyAuthError(e)),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     } catch (e) {

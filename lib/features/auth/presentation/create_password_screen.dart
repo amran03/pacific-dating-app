@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/services/auth_errors.dart';
 
 /// Hubadilisha namba ya simu kuwa "email ya kubuni" (synthetic email).
 String phoneToSyntheticEmail(String phoneNumberOrDigits) {
@@ -69,7 +70,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
       _showMessage("Password imewekwa kikamilifu! 🎉", Colors.green);
       Navigator.pop(context, true);
     } on AuthException catch (e) {
-      _showMessage(e.message, Colors.redAccent);
+      _showMessage(friendlyAuthError(e), Colors.redAccent);
     } catch (e) {
       _showMessage("Kosa: ${e.toString()}", Colors.redAccent);
     } finally {

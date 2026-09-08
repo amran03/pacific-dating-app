@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_color.dart';
+import '../../../../core/services/auth_errors.dart';
 import '../../../../features/profile/presentation/screens/terms_conditions_screen.dart';
 import '../../../../features/profile/presentation/screens/privacy_policy_screen.dart';
+import 'create_password_screen.dart' show phoneToSyntheticEmail;
 import 'login_screen.dart';
 
 class SignUpScreen extends StatefulWidget {
@@ -29,11 +31,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   String _phoneToInternalEmail(String rawPhone) {
-    String digits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.startsWith('0')) {
-      digits = '255${digits.substring(1)}';
-    }
-    return '$digits@pacificapp.com';
+    return phoneToSyntheticEmail(rawPhone);
   }
 
   Future<void> _onSignUp() async {
@@ -74,7 +72,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } on AuthException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(friendlyAuthError(e)),
+          backgroundColor: Colors.red,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
