@@ -2,7 +2,10 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PresenceService {
-  static final _client = Supabase.instance.client;
+  // Lazy on purpose: a static field initializer would call
+  // Supabase.instance during class-load, before Supabase.initialize() runs,
+  // and crash with "You must initialize the supabase instance".
+  static SupabaseClient get _client => Supabase.instance.client;
 
   static String? _myUid;
   static Timer? _heartbeatTimer;

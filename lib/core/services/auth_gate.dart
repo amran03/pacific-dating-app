@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacific_dating_app/core/localization/app_language.dart';
+import 'package:pacific_dating_app/core/services/supabase_service.dart';
+import 'package:pacific_dating_app/core/widgets/supabase_setup_screen.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
 import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 
@@ -13,6 +15,12 @@ class AuthGate extends StatelessWidget {
     return ListenableBuilder(
       listenable: AppLanguage.instance,
       builder: (context, _) {
+        // Don't touch Supabase.instance before it is initialized —
+        // show a helpful setup screen instead of crashing.
+        if (!SupabaseService.instance.isInitialized) {
+          return const SupabaseSetupScreen();
+        }
+
         return StreamBuilder<AuthState>(
           stream: Supabase.instance.client.auth.onAuthStateChange,
           builder: (context, snapshot) {

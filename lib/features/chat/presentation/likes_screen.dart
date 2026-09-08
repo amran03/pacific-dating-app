@@ -100,9 +100,11 @@ class _LikesScreenState extends State<LikesScreen> {
                     ),
                     itemBuilder: (context, index) {
                       final user = likedByUsers[index];
-                      final String imageUrl = (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
-                          ? user.profileImageUrl!
-                          : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600';
+                      // Real photo from Supabase; initials fallback when empty.
+                      final String imageUrl =
+                          (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
+                              ? user.profileImageUrl!
+                              : '';
 
                       return GestureDetector(
                           onTap: () {
@@ -118,12 +120,25 @@ class _LikesScreenState extends State<LikesScreen> {
                             child: Stack(
                               children: [
                                 Positioned.fill(
-                                  child: Image.network(
-                                    imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Container(color: Colors.grey.shade300),
-                                  ),
+                                  child: imageUrl.isNotEmpty
+                                      ? Image.network(
+                                          imageUrl,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) =>
+                                              Container(color: Colors.grey.shade300),
+                                        )
+                                      : Container(
+                                          color: AppColors.primary.withValues(alpha: 0.15),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                                            style: const TextStyle(
+                                              fontSize: 42,
+                                              fontWeight: FontWeight.w900,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                        ),
                                 ),
                                 Container(
                                   decoration: BoxDecoration(

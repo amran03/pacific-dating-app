@@ -56,9 +56,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   final ValueNotifier<bool> _isUploadingMedia = ValueNotifier(false);
   final ValueNotifier<bool> _isSendingMessage = ValueNotifier(false);
 
-  String? _currentlyPlayingPath;
-  bool _isPlaying = false;
-
   // Chat lock state — track whether chat is unlocked for this session.
   StreamSubscription<void>? _playerCompleteSubscription;
 
@@ -101,14 +98,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     });
 
     _playerCompleteSubscription =
-        _audioPlayer.onPlayerComplete.listen((_) {
-          if (!mounted) return;
-
-          setState(() {
-            _isPlaying = false;
-            _currentlyPlayingPath = null;
-          });
-        });
+        _audioPlayer.onPlayerComplete.listen((_) {});
   }
 
   /// Checks if the chat is locked and sets _chatUnlocked accordingly
@@ -221,7 +211,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     _recordingPulse.dispose();
 
     // Best-effort: clear our typing flag when leaving the chat.
-    final uid = currentUser?.uid;
+    final uid = currentUser?.id;
     if (uid != null) {
       _clearTypingStatus(uid);
     }
@@ -617,7 +607,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     client
         .from('messages')
         .update({'seen': true})
-        .in_('id', idsToUpdate)
+        .inFilter('id', idsToUpdate)
         .catchError((_) {
       // Silently ignore — read receipt is best-effort.
     });

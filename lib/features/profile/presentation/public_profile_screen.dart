@@ -108,7 +108,7 @@ class PublicProfileScreen extends StatelessWidget {
             name: user.name,
             avatarUrl: (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
                 ? user.profileImageUrl!
-                : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
+                : '',
             lastMessage: '',
             timeSent: '',
           ),
@@ -128,6 +128,23 @@ class PublicProfileScreen extends StatelessWidget {
       default:
         return Colors.transparent;
     }
+  }
+
+  /// Real avatar fallback: initials on a gradient, used when the user
+  /// has no profile photo (or the photo URL is broken).
+  Widget _initialsHeader(String name) {
+    return Container(
+      color: AppColors.primary,
+      alignment: Alignment.center,
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 110,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
   }
 
   @override
@@ -167,7 +184,7 @@ class PublicProfileScreen extends StatelessWidget {
           final user = UserModel.fromMap(snapshot.data!.first);
           final String imageUrl = (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
               ? user.profileImageUrl!
-              : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=800';
+              : '';
 
           return CustomScrollView(
             physics: const BouncingScrollPhysics(),
@@ -182,12 +199,15 @@ class PublicProfileScreen extends StatelessWidget {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(color: Colors.grey.shade400),
-                      ),
+                      if (imageUrl.isNotEmpty)
+                        Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              _initialsHeader(user.name),
+                        )
+                      else
+                        _initialsHeader(user.name),
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(

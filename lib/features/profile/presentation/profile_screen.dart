@@ -10,13 +10,11 @@ import '../../../core/services/storage_service.dart';
 import '../data/user_model.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
 
-import 'screens/profile_setting.dart';
+import 'screens/edit_profile_screen.dart';
 import 'screens/privacy_policy_screen.dart';
 import 'screens/buy_coins_screen.dart';
 import 'screens/badge_store_screen.dart';
-import 'screens/settings_screen.dart';
 import 'widgets/profile_image_with_ring.dart';
-import '../../../core/localization/app_language.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -27,8 +25,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _isUploadingPhoto = false;
-
-  AppLanguage get _lang => AppLanguage.instance;
 
   Future<void> _changeProfilePhoto() async {
     final user = Supabase.instance.client.auth.currentUser;
@@ -199,10 +195,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               final String displayLocation = (me?.location != null && me!.location!.isNotEmpty)
                   ? me.location!
                   : "Tanzania";
+              // Real profile photo from Supabase (empty string -> initials/avatar fallback).
               final String photoUrl = (me?.profileImageUrl != null && me!.profileImageUrl!.isNotEmpty)
                   ? me.profileImageUrl!
-                  : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=300&auto=format&fit=crop';
+                  : '';
               final int coinBalance = me?.coins ?? 0;
+              // Real online status from presence data (not hardcoded).
+              final bool isOnline = (me?.isOnline ?? false);
 
               return
                 CustomScrollView(
@@ -337,12 +336,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.withValues(alpha: 0.1),
+                                            color: isOnline
+                                                ? Colors.green.withValues(alpha: 0.1)
+                                                : Colors.grey.withValues(alpha: 0.15),
                                             borderRadius: BorderRadius.circular(10),
                                           ),
-                                          child: const Text(
-                                            "Active Status: Online",
-                                            style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold),
+                                          child: Text(
+                                            isOnline ? "Active Status: Online" : "Offline",
+                                            style: TextStyle(
+                                              color: isOnline ? Colors.green : Colors.grey.shade600,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                            ),
                                           ),
                                         ),
                                       ],
@@ -422,42 +427,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               title: "Account & Preferences",
                               items: [
                                 _buildMenuItem(
-                                  icon: Icons.tune_rounded,
-                                  color: Colors.deepPurple,
-                                  title: _lang.t('App Settings', sw: 'Mipangilio ya App'),
-                                  subtitle: _lang.t('Language, Dark Mode, Privacy & more', sw: 'Lugha, Mode Nyeusi, Faragha na zaidi'),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      FadeSlideRoute(page: const SettingsScreen()),
-                                    );
-                                  },
-                                ),
-                                _buildMenuItem(
-                                  icon: Icons.settings_rounded,
+                                  icon: Icons.edit_rounded,
                                   color: Colors.blue,
-                                  title: "Profile Settings",
+                                  title: "Edit Profile",
                                   subtitle: "Badili taarifa zako, picha na mapendeleo",
                                   onTap: () {
                                     Navigator.push(
                                       context,
-                                      // Hapa lazima iwe jina sahihi la class iliyopo kwenye "profile_setting.dart"
-                                      MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                                      MaterialPageRoute(builder: (context) => const EditProfileScreen()),
                                     ).then((_) {
                                       setState(() {});
                                     });
-                                  },
-                                ),
-                                _buildMenuItem(
-                                  icon: Icons.tune_rounded,
-                                  color: Colors.teal,
-                                  title: "App Settings",
-                                  subtitle: "Lugha, Mwangaza, Arifa, Na Matakazo",
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                                    );
                                   },
                                 ),
                                 _buildMenuItem(

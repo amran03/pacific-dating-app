@@ -742,13 +742,18 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               if (val) {
                 if (title.contains("Location")) {
                   PermissionStatus status = await Permission.location.request();
-                  if (status.isGranted) onChanged(true);
-                  else if (status.isPermanentlyDenied) openAppSettings();
+                  if (status.isGranted) {
+                    onChanged(true);
+                  } else if (status.isPermanentlyDenied) {
+                    openAppSettings();
+                  }
                 } else if (title.contains("Notifications")) {
                   PermissionStatus status = await Permission.notification.request();
                   if (status.isGranted) onChanged(true);
                 }
-              } else onChanged(false);
+              } else {
+                onChanged(false);
+              }
             },
           ),
         ],

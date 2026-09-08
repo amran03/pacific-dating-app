@@ -161,9 +161,10 @@ class _SearchScreenState extends State<SearchScreen> {
       separatorBuilder: (context, index) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final user = _results[index];
+        // Real photo from Supabase; initials fallback when empty.
         final String imageUrl = (user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty)
             ? user.profileImageUrl!
-            : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=300';
+            : '';
 
         return Container(
           decoration: BoxDecoration(
@@ -175,7 +176,20 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            leading: CircleAvatar(radius: 26, backgroundImage: NetworkImage(imageUrl)),
+            leading: CircleAvatar(
+              radius: 26,
+              backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+              child: imageUrl.isEmpty
+                  ? Text(
+                      user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    )
+                  : null,
+            ),
             title: Text(
               "${user.name}, ${user.age}",
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),

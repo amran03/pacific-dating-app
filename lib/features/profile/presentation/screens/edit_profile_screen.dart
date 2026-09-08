@@ -1,5 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../../../core/services/storage_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -10,46 +15,142 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
+  final SupabaseClient _client = Supabase.instance.client;
+  final StorageService _storage = StorageService();
+  final ImagePicker _picker = ImagePicker();
 
-  // Controllers
-  late TextEditingController _nameController;
-  late TextEditingController _bioController;
-  late TextEditingController _jobController;
-  late TextEditingController _locationController;
+  late final TextEditingController _nameController;
+  late final TextEditingController _bioController;
+  late final TextEditingController _jobController;
+  late final TextEditingController _locationController;
 
-  // Initial Data
-  String _selectedGender = 'Woman';
-  List<String> _userPhotos = [
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=500',
-    'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=500',
-    'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?q=80&w=500',
-  ];
-
-  List<String> _selectedInterests = ['Photography', 'Music', 'Travel', 'Coffee'];
-  final List<String> _allInterests = [
-    'Photography',
-    'Music',
-    'Travel',
-    'Coffee',
-    'Cooking',
-    'Fitness',
-    'Movies',
-    'Gaming',
-    'Art',
-    'Reading',
-    'Dancing',
-    'Hiking'
+  bool _isLoading = true;
+  bool _isUploadingPhoto = false;
+  bool _isSaving = false;
+  String? _profileImageUrl;
+  final List<String> _selectedInterests = [];
+  static const List<String> _allInterests = [
+    'Photography', 'Music', 'Travel', 'Coffee', 'Cooking', 'Fitness',
+    'Movies', 'Gaming', 'Art', 'Reading', 'Dancing', 'Hiking',
   ];
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: "Amina Salum");
-    _bioController = TextEditingController(
-      text: "Lover of coffee, traveling, and good music. Looking for someone genuine to connect with! ✨",
+    _nameController = TextEditingController();
+    _bioController = TextEditingController();
+    _jobController = TextEditingController();
+    _locationController = TextEditingController();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final user = _client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+    try {
+      final data =
+          await _client.from('users').select().eq('uid', user.id).maybeSingle();
+      if (data != null && mounted) {
+        setState(() {
+          _nameController.text = (data['name'] ?? '') as String;
+          _bioController.text = (data['bio'] ?? '') as String;
+          _jobController.text = (data['occupation'] ?? '') as String;
+          _locationController.text = (data['location'] ?? '') as String;
+          _profileImageUrl = data['profile_image_url'] as String?;
+          if (data['interests'] is List) {
+            _selectedInterests.addAll(
+              (data['interests'] as List).whereType<String>(),
+            );
+          }
+          _isLoading = false;
+        });
+      } else if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      debugPrint('Load profile failed: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Real photo upload to Supabase Storage (avatars bucket) + DB update.
+  Future<void> _changePhoto() async {
+    final user = _client.auth.currentUser;
+    if (user == null || _isUploadingPhoto) return;
+
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80,
     );
-    _jobController = TextEditingController(text: "UI/UX Designer");
-    _locationController = TextEditingController(text: "Dar es Salaam, Tanzania");
+    if (picked == null) return;
+
+    setState(() => _isUploadingPhoto = true);
+    try {
+      final url = await _storage.uploadProfileImage(user.id, File(picked.path));
+      if (url == null) throw Exception('Upload failed');
+
+      await _client
+          .from('users')
+          .update({'profile_image_url': url}).eq('uid', user.id);
+
+      if (mounted) {
+        setState(() => _profileImageUrl = url);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Picha ya profile imebadilishwa!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imeshindikana kupakia picha: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+    final user = _client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _isSaving = true);
+    try {
+      await _client.from('users').update({
+        'name': _nameController.text.trim(),
+        'name_lower': _nameController.text.trim().toLowerCase(),
+        'bio': _bioController.text.trim(),
+        'occupation': _jobController.text.trim(),
+        'location': _locationController.text.trim(),
+        'interests': _selectedInterests,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('uid', user.id);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imeshindikana kuhifadhi: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -61,18 +162,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
-  void _saveProfile() {
-    if (_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Profile updated successfully!"),
-          backgroundColor: AppColors.primary,
-        ),
-      );
-      Navigator.pop(context);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,13 +170,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF1A1A1A), size: 20),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Edit Profile",
+          'Edit Profile',
           style: TextStyle(
-            color: AppColors.textPrimary,
+            color: Color(0xFF1A1A1A),
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -95,306 +184,202 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         centerTitle: true,
         actions: [
           TextButton(
-            onPressed: _saveProfile,
-            child: const Text(
-              "Save",
-              style: TextStyle(
-                color: AppColors.primary,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            onPressed: _isSaving ? null : _saveProfile,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text(
+                    'Save',
+                    style: TextStyle(
+                      color: Color(0xFFFF4B72),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Photo Section
-              const Text(
-                "Profile Photos",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Add at least 2 photos to make your profile stand out.",
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 12),
-              _buildPhotoGrid(),
-
-              const SizedBox(height: 24),
-
-              // 2. Full Name Input
-              const Text(
-                "Full Name",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  hintText: "Enter your full name",
-                  fillColor: AppColors.inputFill,
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                validator: (val) => val == null || val.isEmpty ? "Name is required" : null,
-              ),
-
-              const SizedBox(height: 20),
-
-              // 3. Bio Input
-              const Text(
-                "About Me (Bio)",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _bioController,
-                maxLines: 4,
-                maxLength: 250,
-                decoration: InputDecoration(
-                  hintText: "Write a short bio about yourself...",
-                  fillColor: AppColors.inputFill,
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // 4. Gender Selection
-              const Text(
-                "Gender",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: ['Woman', 'Man', 'Other'].map((gender) {
-                  final isSelected = _selectedGender == gender;
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _selectedGender = gender;
-                        });
-                      },
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.primary : AppColors.inputFill,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Center(
-                          child: Text(
-                            gender,
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : AppColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                            ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFFF4B72)))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildPhotoHeader(),
+                    const SizedBox(height: 28),
+                    _buildTextField(_nameController, 'Name', 'Jina lako'),
+                    const SizedBox(height: 16),
+                    _buildTextField(_bioController, 'Bio',
+                        'Andika maelezo mafupi...', maxLines: 4),
+                    const SizedBox(height: 16),
+                    _buildTextField(_jobController, 'Occupation', 'Kazi yako'),
+                    const SizedBox(height: 16),
+                    _buildTextField(_locationController, 'Location', 'Mji, Nchi'),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Interests',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _allInterests.map((interest) {
+                        final bool selected =
+                            _selectedInterests.contains(interest);
+                        return FilterChip(
+                          label: Text(interest),
+                          selected: selected,
+                          selectedColor:
+                              const Color(0xFFFF4B72).withValues(alpha: 0.2),
+                          checkmarkColor: const Color(0xFFFF4B72),
+                          onSelected: (val) {
+                            setState(() {
+                              val
+                                  ? _selectedInterests.add(interest)
+                                  : _selectedInterests.remove(interest);
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: _isSaving ? null : _saveProfile,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF4B72),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(26),
                           ),
                         ),
+                        child: const Text(
+                          'Save Changes',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white),
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 20),
-
-              // 5. Occupation
-              const Text(
-                "Occupation / Job Title",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _jobController,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.work_outline, color: Colors.grey),
-                  hintText: "e.g. Software Engineer",
-                  fillColor: AppColors.inputFill,
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
+            ),
+    );
+  }
 
-              const SizedBox(height: 20),
-
-              // 6. Location
-              const Text(
-                "Location",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+  Widget _buildPhotoHeader() {
+    return Center(
+      child: GestureDetector(
+        onTap: _isUploadingPhoto ? null : _changePhoto,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFFF4B72).withValues(alpha: 0.12),
+                border: Border.all(color: const Color(0xFFFF4B72), width: 2),
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _locationController,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.location_on_outlined, color: Colors.grey),
-                  hintText: "City, Country",
-                  fillColor: AppColors.inputFill,
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // 7. Interests Selection
-              const Text(
-                "Interests & Passions",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _allInterests.map((interest) {
-                  final isSelected = _selectedInterests.contains(interest);
-                  return FilterChip(
-                    label: Text(interest),
-                    selected: isSelected,
-                    selectedColor: AppColors.primary.withValues(alpha: 0.2),
-                    checkmarkColor: AppColors.primary,
-                    labelStyle: TextStyle(
-                      color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    backgroundColor: AppColors.inputFill,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isSelected ? AppColors.primary : Colors.transparent,
+              child: _profileImageUrl != null && _profileImageUrl!.isNotEmpty
+                  ? ClipOval(
+                      child: Image.network(
+                        _profileImageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _initialAvatar(),
                       ),
-                    ),
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedInterests.add(interest);
-                        } else {
-                          _selectedInterests.remove(interest);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
-
-              const SizedBox(height: 32),
-
-              // Save Button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(26),
-                    ),
+                    )
+                  : _initialAvatar(),
+            ),
+            if (_isUploadingPhoto)
+              Container(
+                width: 120,
+                height: 120,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black38,
+                ),
+                child: const CircularProgressIndicator(color: Colors.white),
+              )
+            else
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF4B72),
+                    shape: BoxShape.circle,
                   ),
-                  child: const Text(
-                    "Save Changes",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                  ),
+                  child: const Icon(Icons.camera_alt_rounded,
+                      color: Colors.white, size: 18),
                 ),
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
 
-  // Grid for Profile Photos
-  Widget _buildPhotoGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        childAspectRatio: 0.8,
+  Widget _initialAvatar() {
+    final String name = _nameController.text;
+    return Center(
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : '?',
+        style: const TextStyle(
+          fontSize: 44,
+          fontWeight: FontWeight.w900,
+          color: Color(0xFFFF4B72),
+        ),
       ),
-      itemCount: 6, // Show 6 slots
-      itemBuilder: (context, index) {
-        final bool hasImage = index < _userPhotos.length;
+    );
+  }
 
-        return Stack(
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.inputFill,
-                borderRadius: BorderRadius.circular(16),
-                image: hasImage
-                    ? DecorationImage(
-                  image: NetworkImage(_userPhotos[index]),
-                  fit: BoxFit.cover,
-                )
-                    : null,
-                border: Border.all(
-                  color: Colors.grey.shade300,
-                  style: hasImage ? BorderStyle.none : BorderStyle.solid,
-                ),
-              ),
-              child: !hasImage
-                  ? const Center(
-                child: Icon(Icons.add_a_photo_outlined, color: Colors.grey, size: 28),
-              )
-                  : null,
+  Widget _buildTextField(
+    TextEditingController controller,
+    String label,
+    String hint, {
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          validator: (value) => (value == null || value.trim().isEmpty)
+              ? 'Tafadhali jaza $label'
+              : null,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: const Color(0xFFF5F5F7),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide.none,
             ),
-            Positioned(
-              bottom: 6,
-              right: 6,
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    if (hasImage) {
-                      _userPhotos.removeAt(index);
-                    } else {
-                      // Demo image addition
-                      _userPhotos.add('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=500');
-                    }
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: hasImage ? Colors.red : AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    hasImage ? Icons.close : Icons.add,
-                    color: Colors.white,
-                    size: 16,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
   }
 }

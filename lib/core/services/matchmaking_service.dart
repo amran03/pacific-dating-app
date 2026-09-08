@@ -118,6 +118,15 @@ class MatchmakingService {
     return isMutual;
   }
 
+  String _formatTimeAgo(DateTime? dt) {
+    if (dt == null) return '';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Sasa hivi';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m zilizopita';
+    if (diff.inHours < 24) return '${diff.inHours}h zilizopita';
+    return '${diff.inDays}d zilizopita';
+  }
+
   Future<void> _createMatch(String otherUid) async {
     final String chatId = chatIdFor(otherUid);
     final ids = [_myUid, otherUid]..sort();
@@ -149,6 +158,7 @@ class MatchmakingService {
         'title': 'Umepata Match! 🎉',
         'description': 'Wewe na $myName mmependana!',
         'created_at': DateTime.now().toIso8601String(),
+        'read': false,
       },
       {
         'to_uid': _myUid,
@@ -156,6 +166,7 @@ class MatchmakingService {
         'title': 'Umepata Match! 🎉',
         'description': 'Wewe na $theirName mmependana!',
         'created_at': DateTime.now().toIso8601String(),
+        'read': false,
       }
     ]);
   }
@@ -218,6 +229,7 @@ class MatchmakingService {
         'title': 'Umepokea Coins! 🪙',
         'description': '${myProfile?.name ?? 'Mtumiaji'} amelipa $price Coins kufungua chat na wewe.',
         'created_at': DateTime.now().toIso8601String(),
+        'read': false,
       });
     }
   }
@@ -231,7 +243,7 @@ class MatchmakingService {
         .asyncMap((event) async {
       if (event.isEmpty) return [];
       final fromUids = event.map((e) => e['from_uid'] as String).toList();
-      final usersResponse = await _client.from('users').select().in_('uid', fromUids);
+      final usersResponse = await _client.from('users').select().inFilter('uid', fromUids);
       return (usersResponse as List).map((u) => UserModel.fromMap(u)).toList();
     });
   }
@@ -262,13 +274,13 @@ class MatchmakingService {
       final usersResponse = await _client
           .from('users')
           .select('uid, name, profile_image_url, chat_unlock_price')
-          .in_('uid', otherUids.toList());
+          .inFilter('uid', otherUids.toList());
 
       final Map<String, dynamic> userMap = {
         for (var u in (usersResponse as List)) u['uid'] as String: u
       };
 
-      final List<ChatModel> chatList = [];
+      final List<_ChatWithMetadata> chatList = [];
       for (final room in rooms) {
         final List<dynamic> participants = room['participants'] ?? [];
         final List<dynamic> unlockedBy = room['unlocked_by'] ?? [];
@@ -308,12 +320,3 @@ class _ChatWithMetadata {
   _ChatWithMetadata({required this.model, required this.lastMessageAt});
 }
 
-  String _formatTimeAgo(DateTime? dt) {
-    if (dt == null) return '';
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'Sasa hivi';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m zilizopita';
-    if (diff.inHours < 24) return '${diff.inHours}h zilizopita';
-    return '${diff.inDays}d zilizopita';
-  }
-}

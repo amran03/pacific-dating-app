@@ -116,6 +116,17 @@ class NotificationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final String myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
 
+    // Real read receipts: mark everything as read once the user opens
+    // the notifications screen (idempotent, safe to call on rebuilds).
+    if (myUid.isNotEmpty) {
+      Supabase.instance.client
+          .from('notifications')
+          .update({'read': true})
+          .eq('to_uid', myUid)
+          .eq('read', false)
+          .then((_) {}, onError: (e) => debugPrint('Mark-as-read failed: $e'));
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
@@ -512,9 +523,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
         'name': u.name,
         'age': u.age,
         'location': locationLabel,
+        // Empty string -> real initials/avatar fallback in _buildCardUI.
         'image': (u.profileImageUrl != null && u.profileImageUrl!.isNotEmpty)
             ? u.profileImageUrl!
-            : 'https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=600',
+            : '',
         'isMatched': false,
         'chatUnlockPrice': u.chatUnlockPrice,
       };
@@ -745,30 +757,37 @@ class _DiscoverTabState extends State<DiscoverTab> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: Stack(
-          alignment: Alignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.notifications_active_rounded, color: Colors.black87, size: 26),
+        leading: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: Supabase.instance.client.auth.currentUser == null
+              ? const Stream.empty()
+              : Supabase.instance.client
+                  .from('notifications')
+                  .stream(primaryKey: ['id'])
+                  .eq('to_uid', Supabase.instance.client.auth.currentUser!.id),
+          builder: (context, snapshot) {
+            final int unreadCount = (snapshot.data ?? [])
+                .where((n) => n['read'] != true)
+                .length;
+
+            return IconButton(
+              icon: Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text('$unreadCount'),
+                alignment: Alignment.topRight,
+                child: const Icon(
+                  Icons.notifications_active_rounded,
+                  color: Colors.black87,
+                  size: 26,
+                ),
+              ),
               onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const NotificationScreen()),
                 );
               },
-            ),
-            Positioned(
-              right: 12,
-              top: 12,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: Colors.redAccent,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
-          ],
+            );
+          },
         ),
         title: Text(
           "Pacific Discover",
@@ -1020,13 +1039,21 @@ class _DiscoverTabState extends State<DiscoverTab> {
   }
 
   Widget _buildCardUI(Map<String, dynamic> profile, {required bool isFront}) {
+    final String imageUrl = (profile['image'] as String?) ?? '';
+    final String name = (profile['name'] as String?) ?? '';
+
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(32),
-        image: DecorationImage(
-          image: NetworkImage(profile['image']),
-          fit: BoxFit.cover,
-        ),
+        image: imageUrl.isNotEmpty
+            ? DecorationImage(
+                image: NetworkImage(imageUrl),
+                fit: BoxFit.cover,
+                // Broken URL -> real avatar fallback instead of crash.
+                onError: (_, __) {},
+              )
+            : null,
+        color: imageUrl.isEmpty ? const Color(0xFF252525) : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
@@ -1037,6 +1064,18 @@ class _DiscoverTabState extends State<DiscoverTab> {
       ),
       child: Stack(
         children: [
+          // Real avatar fallback: initials on a gradient background.
+          if (imageUrl.isEmpty)
+            Center(
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 96,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(32),

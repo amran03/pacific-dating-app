@@ -28,6 +28,7 @@ class UserModel {
   final int chatUnlockPrice;
   final bool locationEnabled;
   final bool notificationsEnabled;
+  final bool isOnline;
   final bool isProfileComplete;
 
   UserModel({
@@ -58,6 +59,7 @@ class UserModel {
     this.chatUnlockPrice = 0,
     this.locationEnabled = false,
     this.notificationsEnabled = false,
+    this.isOnline = false,
     this.isProfileComplete = false,
   });
 
@@ -91,6 +93,7 @@ class UserModel {
       'chat_unlock_price': chatUnlockPrice,
       'location_enabled': locationEnabled,
       'notifications_enabled': notificationsEnabled,
+      'is_online': isOnline,
       'is_profile_complete': isProfileComplete,
       'updated_at': DateTime.now().toIso8601String(),
     };
@@ -125,6 +128,7 @@ class UserModel {
       chatUnlockPrice: map['chat_unlock_price'] ?? 0,
       locationEnabled: map['location_enabled'] ?? false,
       notificationsEnabled: map['notifications_enabled'] ?? false,
+      isOnline: map['is_online'] ?? false,
       isProfileComplete: map['is_profile_complete'] ?? false,
     );
   }

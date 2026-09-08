@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/localization/app_language.dart';
 import 'core/localization/app_theme.dart';
 import 'core/services/auth_gate.dart';
+import 'core/services/notification_service.dart';
 import 'core/services/presence_tracker.dart';
 import 'core/services/supabase_service.dart';
 
@@ -21,6 +22,9 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Supabase initialization failed: $e');
   }
+
+  // Real (system) notifications
+  await NotificationService.instance.initialize();
 
   runApp(const MyApp());
 }

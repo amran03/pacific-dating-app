@@ -2,8 +2,6 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
-    // Google Services Plugin kwa ajili ya Firebase
-    id("com.google.gms.google-services")
 }
 
 android {
@@ -14,19 +12,18 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.pacific_dating_app"
 
-        // Firebase inahitaji minSdk isiyopungua 21
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Inazuia ku-stuck kwa app kutokana na ukubwa wa maktaba za Firebase
         multiDexEnabled = true
     }
 
@@ -50,16 +47,9 @@ flutter {
 }
 
 dependencies {
-    // Import the BoM for the Firebase platform
-    implementation(platform("com.google.firebase:firebase-bom:34.17.0"))
+    // Required by flutter_local_notifications (core library desugaring).
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 
-    // Add the dependency for the Firebase Authentication library
-    // When using the BoM, you don't specify versions in Firebase library dependencies
-    implementation("com.google.firebase:firebase-auth")
-
-    // Also add the dependency for the Google Play services library and specify its version
-    implementation("com.google.android.gms:play-services-auth:21.6.0")
-
-    // Multidex - inahitajika kwa sababu multiDexEnabled = true na Firebase ina maktaba nyingi
+    // Multidex - inahitajika kwa sababu multiDexEnabled = true
     implementation("androidx.multidex:multidex:2.0.1")
 }

@@ -1,9 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
-import 'package:pacific_dating_app/features/auth/presentation/new_password_screen.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -288,19 +286,6 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
       node.dispose();
     }
     super.dispose();
-  }
-
-  void _onConfirmPressed() {
-    // Kwa Supabase, mara nyingi tunatumia email link.
-    // Ikiwa unatumia OTP (namba 6), unahitaji Supabase GoTrue OTP verification.
-    // Hapa nitaelekeza tu kwenda NewPasswordScreen kama mfano.
-    Navigator.pop(context);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const NewPasswordScreen(),
-      ),
-    );
   }
 
   @override

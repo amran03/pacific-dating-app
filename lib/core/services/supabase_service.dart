@@ -1,20 +1,32 @@
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter/foundation.dart';
+
+import '../config/app_config.dart';
 
 class SupabaseService {
   static final SupabaseService instance = SupabaseService._internal();
   SupabaseService._internal();
 
-  // TODO: Replace with your actual Supabase credentials
-  static const String _supabaseUrl = 'YOUR_SUPABASE_URL';
-  static const String _supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+  bool _initialized = false;
+  bool get isInitialized => _initialized;
 
   Future<void> initialize() async {
+    if (!AppConfig.isSupabaseConfigured) {
+      debugPrint(
+        'Supabase NOT configured. Add your credentials via:\n'
+        '  flutter run --dart-define=SUPABASE_URL=https://xxxx.supabase.co '
+        '--dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_...\n'
+        'or edit lib/core/config/app_config.dart',
+      );
+      return;
+    }
+
     try {
       await Supabase.initialize(
-        url: _supabaseUrl,
-        publishableKey: _supabaseAnonKey,
+        url: AppConfig.supabaseUrl,
+        publishableKey: AppConfig.supabasePublishableKey,
       );
+      _initialized = true;
       debugPrint('Supabase initialized successfully');
     } catch (e) {
       debugPrint('Supabase initialization failed: $e');
@@ -37,3 +49,4 @@ class SupabaseService {
     }
   }
 }
+
