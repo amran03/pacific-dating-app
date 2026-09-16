@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/services/storage_service.dart';
+import '../../../../core/widgets/heart_loader.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -100,7 +101,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         setState(() => _profileImageUrl = url);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Picha ya profile imebadilishwa!'),
+            content: Text('Profile photo updated!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -108,7 +109,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imeshindikana kupakia picha: $e')),
+          SnackBar(content: Text('Failed to upload photo: $e')),
         );
       }
     } finally {
@@ -145,7 +146,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imeshindikana kuhifadhi: $e')),
+          SnackBar(content: Text('Failed to save: $e')),
         );
       }
     } finally {
@@ -203,8 +204,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFFF4B72)))
+          ? const Center(child: HeartLoader(size: 72))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Form(
@@ -313,7 +313,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   shape: BoxShape.circle,
                   color: Colors.black38,
                 ),
-                child: const CircularProgressIndicator(color: Colors.white),
+                child: const HeartLoader(size: 56, color: Colors.white),
               )
             else
               Positioned(
@@ -365,7 +365,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           controller: controller,
           maxLines: maxLines,
           validator: (value) => (value == null || value.trim().isEmpty)
-              ? 'Tafadhali jaza $label'
+              ? 'Please fill in $label'
               : null,
           decoration: InputDecoration(
             hintText: hint,

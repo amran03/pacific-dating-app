@@ -101,12 +101,12 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           backgroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text(
-            "Una miaka $age? 🎂",
+            "You are $age? 🎂",
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: _themeColor),
           ),
           content: const Text(
-            "Tafadhali hakikisha umri wako ni sahihi. Maelezo haya yatatumiwa kuonyesha umri wako kwenye profile na huwezi kuyabadilisha baada ya kukamilisha usajili.",
+            "Please confirm your age is correct. It will be shown on your profile and cannot be changed after registration.",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
           ),
@@ -125,7 +125,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 Navigator.pop(context);
                 onConfirmed();
               },
-              child: const Text("Ndiyo, ni Sahihi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text("Yes, it is correct", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -144,12 +144,12 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   void _nextStep() async {
     if (_currentStep == 0 && _nameController.text.trim().isEmpty) {
-      _showSnackBar("Tafadhali ingiza jina lako la kwanza kuendelea.");
+      _showSnackBar("Please enter your first name to continue.");
       return;
     }
     if (_currentStep == 1) {
       if (_selectedBirthDate == null) {
-        _showSnackBar("Tafadhali chagua tarehe yako ya kuzaliwa.");
+        _showSnackBar("Please select your date of birth.");
         return;
       }
       _calculatedAge = _calculateAge(_selectedBirthDate!);
@@ -159,23 +159,23 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       return;
     }
     if (_currentStep == 2 && _selectedGender == null) {
-      _showSnackBar("Tafadhali chagua jinsia yako.");
+      _showSnackBar("Please select your gender.");
       return;
     }
     if (_currentStep == 3 && _profileImage == null) {
-      _showSnackBar("Tafadhali weka picha yako kuu ya profile.");
+      _showSnackBar("Please add your main profile photo.");
       return;
     }
     if (_currentStep == 4 && _bioController.text.trim().isEmpty) {
-      _showSnackBar("Tafadhali andika maelezo mafupi kukuhusu.");
+      _showSnackBar("Please write a short bio about yourself.");
       return;
     }
     if (_currentStep == 5 && _interestedGender == null) {
-      _showSnackBar("Tafadhali chagua jinsia unayovutiwa nayo.");
+      _showSnackBar("Please select the gender you are interested in.");
       return;
     }
     if (_currentStep == 6 && _relationshipGoal == null) {
-      _showSnackBar("Tafadhali chagua aina ya uhusiano unayotafuta.");
+      _showSnackBar("Please select the type of relationship you are looking for.");
       return;
     }
 
@@ -225,7 +225,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       }
       currentUser = Supabase.instance.client.auth.currentUser;
       if (currentUser == null) {
-        _showSnackBar("Imeshindikana kutengeneza akaunti. Jaribu tena.");
+        _showSnackBar("Failed to create account. Please try again.");
         setState(() => _isSaving = false);
         return;
       }
@@ -256,14 +256,14 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       await _dbService.saveUserProfile(userModel);
 
       if (!mounted) return;
-      _showSnackBar("Akaunti yako imekamilika kikamilifu! 🎉", color: Colors.green);
+      _showSnackBar("Your account is fully complete! 🎉", color: Colors.green);
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const PacificLaunchScreen()),
             (route) => false,
       );
     } catch (e) {
-      _showSnackBar("Imeshindikana kuhifadhi profile: ${e.toString()}");
+      _showSnackBar("Failed to save profile: ${e.toString()}");
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -374,7 +374,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                     )
                         : Text(
-                      _currentStep == _totalSteps - 1 ? "Continue ▶" : "Endelea ▶",
+                      _currentStep == _totalSteps - 1 ? "Continue ▶" : "Continue ▶",
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white),
                     ),
                   ),
@@ -415,8 +415,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildNameStep() {
     return _buildStepLayout(
-      title: "Jina Lako la Kwanza? ✍️",
-      subtitle: "Ingiza jina unalotaka kutumia. Hili ndilo jina kuu litakalotokea kwenye profile yako kwa watu wengine.",
+      title: "Your First Name? ✍️",
+      subtitle: "Enter the name you want to use. This is the main name other people will see on your profile.",
       child: Container(
         decoration: _buildBoxDecoration(),
         child: TextField(
@@ -439,7 +439,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildBirthdayStep() {
     return _buildStepLayout(
       title: "Tarehe ya Kuzaliwa 🎂",
-      subtitle: "Tunatumia tarehe hii kukokotoa umri wako. Watu wengine wataona umri wako pekee (mfano: 24) na sio tarehe kamili ya kuzaliwa.",
+      subtitle: "We use this date to calculate your age. Watu wengine wataona umri wako pekee (mfano: 24) na sio tarehe kamili ya kuzaliwa.",
       child: InkWell(
         onTap: () async {
           DateTime? picked = await showDatePicker(
@@ -472,8 +472,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildIdentifyAsStep() {
     return _buildStepLayout(
-      title: "Jinsia Yako 👤",
-      subtitle: "Chagua jinsia yako ili kusaidia mfumo kukutafutia watu sahihi kulingana na matakwa yako.",
+      title: "Your Gender 👤",
+      subtitle: "Select your gender to help the system find the right people for you.",
       child: Column(
         children: [
           _buildGenderTile("Mwanaume (Man) 👨", "Male"),
@@ -522,8 +522,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildAddPhotoStep() {
     return _buildStepLayout(
-      title: "Picha Yako Kuu 📸",
-      subtitle: "Weka picha inayokuonyesha vizuri sura yako. Picha zenye muonekano mzuri huongeza nafasi ya kupata likes kwa zaidi ya 80%.",
+      title: "Your Main Photo 📸",
+      subtitle: "Add a clear photo of your face. Good photos increase your likes by over 80%.",
       child: Center(
         child: GestureDetector(
           onTap: _pickImage,
@@ -552,7 +552,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                   child: Icon(Icons.add_a_photo_rounded, size: 48, color: _themeColor),
                 ),
                 const SizedBox(height: 16),
-                Text("Gusa Kuweka Picha", style: TextStyle(color: _themeColor, fontWeight: FontWeight.w800, fontSize: 16)),
+                Text("Tap to Add Photo", style: TextStyle(color: _themeColor, fontWeight: FontWeight.w800, fontSize: 16)),
               ],
             ),
           ),
@@ -564,7 +564,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildDescribeYourselfStep() {
     return _buildStepLayout(
       title: "Jieleze Kidogo (Bio) 📝",
-      subtitle: "Andika vitu vichache vinavyokuelezea, kama vile mambo unayopenda kufanya, kazi, au aina ya maisha unayopendelea.",
+      subtitle: "Write a few things about yourself, like what you enjoy, your work, or the lifestyle you prefer.",
       child: Container(
         decoration: _buildBoxDecoration(),
         child: TextField(
@@ -588,7 +588,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildInterestedGenderStep() {
     return _buildStepLayout(
       title: "Unavutiwa na Nani? ❤️",
-      subtitle: "Chagua kundi la watu unalotaka lionekane kwenye zoezi lako la ku-swipe na kutafuta marafiki.",
+      subtitle: "Choose the group of people you want to see while swiping and finding friends.",
       child: Column(
         children: [
           _buildSelectableOption("Wanaume (Men) 👨", _interestedGender, (val) => setState(() => _interestedGender = val)),
@@ -604,7 +604,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildRelationshipGoalStep() {
     return _buildStepLayout(
       title: "Unatafuta Nini Hapa? 🎯",
-      subtitle: "Weka wazi dhumuni lako ili ulinganishwe na watu wenye nia na malengo yanayofanana na yako kikamilifu.",
+      subtitle: "State your intention clearly so you can be matched with people who share the same goals.",
       child: Column(
         children: _relationshipGoals.map((goal) {
           return Padding(
@@ -618,21 +618,21 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildPermissionsStep() {
     return _buildStepLayout(
-      title: "Ruhusa Muhimu 🔔",
-      subtitle: "Ruhusu huduma hizi ili tuweze kukuonyesha watu walio karibu na eneo lako na kukujulisha pindi unapopata match mpya.",
+      title: "Important Permissions 🔔",
+      subtitle: "Allow these services so we can show you people near you and notify you when you get a new match.",
       child: Column(
         children: [
           _buildPermissionSwitch(
-            title: "Location Access (Eneo)",
-            subtitle: "Inasaidie kupata na kuonyesha watu waliopo karibu nawe kijiografia.",
+            title: "Location Access",
+            subtitle: "Helps us find and show people near you.",
             icon: Icons.location_on_rounded,
             value: _locationGranted,
             onChanged: (val) => setState(() => _locationGranted = val),
           ),
           const SizedBox(height: 16),
           _buildPermissionSwitch(
-            title: "Notifications (Taarifa)",
-            subtitle: "Kupokea ujumbe wa papo hapo na taarifa za likes kutoka kwa wengine.",
+            title: "Notifications",
+            subtitle: "Receive instant messages and notifications about likes from others.",
             icon: Icons.notifications_active_rounded,
             value: _notificationGranted,
             onChanged: (val) => setState(() => _notificationGranted = val),
@@ -669,9 +669,9 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text("Karibu Sana, ${_nameController.text.isNotEmpty ? _nameController.text : 'Mgeni'}! 🎉", textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white)),
+                  Text("Welcome, ${_nameController.text.isNotEmpty ? _nameController.text : 'Guest'}! 🎉", textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white)),
                   const SizedBox(height: 8),
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)), child: const Text("Profile Yako Iko Tayari 100%", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)), child: const Text("Your Profile Is 100% Ready", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
                 ],
               ),
             ),
@@ -683,16 +683,16 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [Icon(Icons.stars_rounded, color: _themeColor, size: 28), const SizedBox(width: 10), const Text("Muhtasari wa Profile", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary))]),
+                  Row(children: [Icon(Icons.stars_rounded, color: _themeColor, size: 28), const SizedBox(width: 10), const Text("Profile Summary", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textPrimary))]),
                   const Divider(height: 24),
-                  _buildSummaryRow(Icons.cake_rounded, "Umri", "$_calculatedAge Miaka"),
-                  _buildSummaryRow(Icons.wc_rounded, "Unatafuta", _interestedGender ?? "Haijachaguliwa"),
-                  _buildSummaryRow(Icons.favorite_rounded, "Lengo", _relationshipGoal ?? "Haijachaguliwa"),
+                  _buildSummaryRow(Icons.cake_rounded, "Age", "$_calculatedAge years"),
+                  _buildSummaryRow(Icons.wc_rounded, "Looking for", _interestedGender ?? "Not selected"),
+                  _buildSummaryRow(Icons.favorite_rounded, "Goal", _relationshipGoal ?? "Not selected"),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            Text("Bonyeza 'Continue' hapo chini kuweka password yako ya mwisho, kisha uanze kuona watu wanaokuzunguka na kuanza safari yako ya mahusiano! 🔥", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5, fontWeight: FontWeight.w500)),
+            Text("Tap 'Continue' below to set your final password, then start seeing people around you and begin your dating journey! 🔥", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5, fontWeight: FontWeight.w500)),
             const SizedBox(height: 20),
           ],
         ),

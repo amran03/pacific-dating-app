@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-// Kutumia package import sahihi kwa ajili ya MainDashboardScreen
+// Kutumia package import sahihi to ajili ya MainDashboardScreen
 import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 
 class PacificLaunchScreen extends StatefulWidget {
@@ -94,7 +94,7 @@ class _PacificLaunchScreenState extends State<PacificLaunchScreen>
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      "Pata mwandani wako wa maisha kwa urahisi.\nAnza safari yako ya upendo leo.",
+                      "Pata mwandani wako wa maisha to urahisi.\nStart your love journey today.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,

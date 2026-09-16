@@ -5,7 +5,9 @@ import '../../../../core/services/core_error_service.dart';
 import 'gender_screen.dart'; // Tutaitengeneza hatua inayofuata
 
 class BirthdayScreen extends StatefulWidget {
-  const BirthdayScreen({super.key});
+  final String firstName;
+
+  const BirthdayScreen({super.key, required this.firstName});
 
   @override
   State<BirthdayScreen> createState() => _BirthdayScreenState();
@@ -123,7 +125,10 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const GenderScreen(),
+                        builder: (context) => GenderScreen(
+                          firstName: widget.firstName,
+                          birthDate: selectedDate!,
+                        ),
                       ),
                     );
                   },

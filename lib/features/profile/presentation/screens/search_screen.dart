@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -28,7 +28,7 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
-  // "Debounce" - inasubiri mtumiaji aache kuandika kwa milisekunde 400
+  // "Debounce" - inasubiri mtumiaji aache kuandika to milisekunde 400
   // kabla ya kutafuta, ili tusipige Firestore kila herufi anapoandika.
   void _onSearchChanged(String query) {
     _debounce?.cancel();
@@ -62,7 +62,7 @@ class _SearchScreenState extends State<SearchScreen> {
       if (mounted) {
         setState(() => _isSearching = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Imeshindikana kutafuta: $e")),
+          SnackBar(content: Text("Search failed: $e")),
         );
       }
     }
@@ -91,7 +91,7 @@ class _SearchScreenState extends State<SearchScreen> {
             autofocus: true,
             onChanged: _onSearchChanged,
             decoration: InputDecoration(
-              hintText: "Tafuta jina la mtumiaji...",
+              hintText: "Search for a user name...",
               hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
               prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey, size: 22),
               suffixIcon: _searchController.text.isNotEmpty
@@ -122,7 +122,7 @@ class _SearchScreenState extends State<SearchScreen> {
             Icon(Icons.person_search_rounded, size: 70, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              "Andika jina la mtu unayemtafuta",
+              "Type the name of the person you are looking for",
               style: TextStyle(color: Colors.grey.shade600, fontSize: 15, fontWeight: FontWeight.w300),
             ),
           ],
@@ -131,7 +131,7 @@ class _SearchScreenState extends State<SearchScreen> {
     }
 
     if (_isSearching) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(child: HeartLoader(size: 62));
     }
 
     if (_results.isEmpty) {
@@ -142,12 +142,12 @@ class _SearchScreenState extends State<SearchScreen> {
             Icon(Icons.search_off_rounded, size: 70, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              "Hakuna mtumiaji aliyepatikana",
+              "No user found",
               style: TextStyle(color: Colors.grey.shade600, fontSize: 15, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             Text(
-              "Jaribu jina lingine au hakikisha tahajia sahihi",
+              "Try another name or check the spelling",
               style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w300),
             ),
           ],

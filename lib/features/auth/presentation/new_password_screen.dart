@@ -47,7 +47,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Kosa: $e"), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -72,12 +72,12 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  "Tengeneza Password Mpya",
+                  "Create a New Password",
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  "Tafadhali weka password mpya ambayo utaitumia kuingia kwenye akaunti yako.",
+                  "Please enter a new password that you will use to log in to your account.",
                   style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: 32),
@@ -99,7 +99,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
                   validator: (value) {
-                    if (value == null || value.length < 6) return "Password lazima iwe angalau herufi 6";
+                    if (value == null || value.length < 6) return "Password must be at least 6 characters";
                     return null;
                   },
                 ),
@@ -116,13 +116,13 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                       icon: Icon(_isConfirmHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined),
                       onPressed: () => setState(() => _isConfirmHidden = !_isConfirmHidden),
                     ),
-                    hintText: "Rudia password mpya",
+                    hintText: "Repeat password mpya",
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
                   validator: (value) {
-                    if (value != _passwordController.text) return "Password hazifanani";
+                    if (value != _passwordController.text) return "Passwords do not match";
                     return null;
                   },
                 ),

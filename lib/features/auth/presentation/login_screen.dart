@@ -26,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final String password = _passwordController.text.trim();
 
     if (rawInput.isEmpty || password.isEmpty) {
-      _showMessage("Tafadhali jaza email/namba ya simu na password.", Colors.redAccent);
+      _showMessage("Please enter your email/phone number and password.", Colors.redAccent);
       return;
     }
 
@@ -42,7 +42,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (!mounted) return;
 
-      _showMessage("Umeingia kikamilifu!", Colors.green);
+      _showMessage("Logged in successfully!", Colors.green);
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -52,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } on AuthException catch (e) {
       _showMessage(friendlyAuthError(e), Colors.redAccent);
     } catch (e) {
-      _showMessage("Kosa: ${e.toString()}", Colors.redAccent);
+      _showMessage("Error: ${e.toString()}", Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -90,7 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Title Header
               const Text(
-                "Karibu Tena!",
+                "Welcome Back!",
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
@@ -176,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         });
                       },
                     ),
-                    hintText: "Ingiza password",
+                    hintText: "Enter password",
                     hintStyle: TextStyle(color: Colors.grey.shade400),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(16),
@@ -197,7 +197,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     );
                   },
                   child: const Text(
-                    "Umesahau Password?",
+                    "Forgot Password?",
                     style: TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.bold,
@@ -239,7 +239,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Text(
-                    "Huna akaunti? ",
+                    "Don't have an account? ",
                     style: TextStyle(color: AppColors.textSecondary),
                   ),
                   GestureDetector(

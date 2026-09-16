@@ -117,12 +117,12 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           elevation: 10,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text(
-            "Una miaka $age?",
+            "You are $age?",
             textAlign: TextAlign.center,
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: _themeColor),
           ),
           content: const Text(
-            "Tafadhali hakikisha umri wako ni sahihi. Maelezo haya yatatumiwa kuonyesha umri wako kwenye profile na huwezi kuyabadilisha baada ya kukamilisha usajili.",
+            "Please confirm your age is correct. It will be shown on your profile and cannot be changed after registration.",
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4, fontWeight: FontWeight.w300),
           ),
@@ -142,7 +142,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 Navigator.pop(context);
                 onConfirmed();
               },
-              child: const Text("Ndiyo, ni Sahihi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Text("Yes, it is correct", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -185,12 +185,12 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     }
 
     if (_currentStep == 2 && _selectedGender == null) {
-      CoreErrorService().showError(context, "Tafadhali chagua jinsia yako.");
+      CoreErrorService().showError(context, "Please select your gender.");
       return;
     }
 
     // Picha sasa si lazima (optional) - Firebase Storage inahitaji Blaze
-    // plan (billing) ambayo si lazima kwa MVP. Mtumiaji anaweza kuiweka
+    // plan (billing) ambayo si lazima to MVP. User anaweza kuiweka
     // baadaye kwenye Profile Settings.
 
     if (_currentStep == 4) {
@@ -202,12 +202,12 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     }
 
     if (_currentStep == 5 && _interestedGender == null) {
-      CoreErrorService().showError(context, "Tafadhali chagua jinsia unayovutiwa nayo.");
+      CoreErrorService().showError(context, "Please select the gender you are interested in.");
       return;
     }
 
     if (_currentStep == 6 && _relationshipGoal == null) {
-      CoreErrorService().showError(context, "Tafadhali chagua aina ya uhusiano unayotafuta.");
+      CoreErrorService().showError(context, "Please select the type of relationship you are looking for.");
       return;
     }
 
@@ -263,7 +263,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
       currentUser = Supabase.instance.client.auth.currentUser;
       if (currentUser == null) {
-        _showSnackBar("Imeshindikana kutengeneza akaunti. Jaribu tena.");
+        _showSnackBar("Failed to create account. Please try again.");
         setState(() => _isSaving = false);
         return;
       }
@@ -302,7 +302,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
       if (!mounted) return;
 
-      _showSnackBar("Akaunti yako imekamilika kikamilifu! 🎉", color: Colors.green);
+      _showSnackBar("Your account is fully complete! 🎉", color: Colors.green);
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -418,7 +418,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                       child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                     )
                         : Text(
-                      _currentStep == _totalSteps - 1 ? "Continue ▶" : "Endelea ▶",
+                      _currentStep == _totalSteps - 1 ? "Continue ▶" : "Continue ▶",
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white),
                     ),
                   ),
@@ -435,8 +435,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildNameStep() {
     return _buildStepLayout(
-      title: "Jina Lako la Kwanza?",
-      subtitle: "Ingiza jina unalotaka kutumia. Hili ndilo jina kuu litakalotokea kwenye profile yako kwa watu wengine.",
+      title: "Your First Name?",
+      subtitle: "Enter the name you want to use. This is the main name other people will see on your profile.",
       child: Container(
         decoration: _buildBoxDecoration(),
         child: TextField(
@@ -465,7 +465,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildBirthdayStep() {
     return _buildStepLayout(
       title: "Tarehe ya Kuzaliwa",
-      subtitle: "Tunatumia tarehe hii kukokotoa umri wako. Watu wengine wataona umri wako pekee (mfano: 24) na sio tarehe kamili ya kuzaliwa.",
+      subtitle: "We use this date to calculate your age. Watu wengine wataona umri wako pekee (mfano: 24) na sio tarehe kamili ya kuzaliwa.",
       child: InkWell(
         onTap: () async {
           DateTime? picked = await showDatePicker(
@@ -504,8 +504,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildIdentifyAsStep() {
     return _buildStepLayout(
-      title: "Jinsia Yako",
-      subtitle: "Chagua jinsia yako ili kusaidia mfumo kukutafutia watu sahihi kulingana na matakwa yako.",
+      title: "Your Gender",
+      subtitle: "Select your gender to help the system find the right people for you.",
       child: Column(
         children: [
           _buildGenderTile("Mwanaume (Man)", "Male"),
@@ -562,8 +562,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildAddPhotoStep() {
     return _buildStepLayout(
-      title: "Picha Yako Kuu",
-      subtitle: "Weka picha inayokuonyesha vizuri sura yako. Picha zenye muonekano mzuri huongeza nafasi ya kupata likes kwa zaidi ya 80%.",
+      title: "Your Main Photo",
+      subtitle: "Add a clear photo of your face. Good photos increase your likes by over 80%.",
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -601,7 +601,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "Gusa Kuweka Picha",
+                    "Tap to Add Photo",
                     style: TextStyle(color: _themeColor, fontWeight: FontWeight.w800, fontSize: 16),
                   ),
                 ],
@@ -611,7 +611,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
           const Padding(
             padding: EdgeInsets.only(top: 14),
             child: Text(
-              "Si lazima kuweka picha sasa - unaweza kuiweka baadaye kwenye Profile.",
+              "No need to add a photo now - you can add one later in your Profile.",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12.5, color: Colors.grey, fontStyle: FontStyle.italic),
             ),
@@ -624,7 +624,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildDescribeYourselfStep() {
     return _buildStepLayout(
       title: "Jieleze Kidogo (Bio)",
-      subtitle: "Andika vitu vichache vinavyokuelezea, kama vile mambo unayopenda kufanya, kazi, au aina ya maisha unayopendelea.",
+      subtitle: "Write a few things about yourself, like what you enjoy, your work, or the lifestyle you prefer.",
       child: Container(
         decoration: _buildBoxDecoration(),
         child: TextField(
@@ -654,7 +654,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildInterestedGenderStep() {
     return _buildStepLayout(
       title: "Unavutiwa na Nani?",
-      subtitle: "Chagua kundi la watu unalotaka lionekane kwenye zoezi lako la ku-swipe na kutafuta marafiki.",
+      subtitle: "Choose the group of people you want to see while swiping and finding friends.",
       child: Column(
         children: [
           _buildSelectableOption("Wanaume (Men)", _interestedGender, (val) => setState(() => _interestedGender = val)),
@@ -670,7 +670,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   Widget _buildRelationshipGoalStep() {
     return _buildStepLayout(
       title: "Unatafuta Nini Hapa?",
-      subtitle: "Weka wazi dhumuni lako ili ulinganishwe na watu wenye nia na malengo yanayofanana na yako kikamilifu.",
+      subtitle: "State your intention clearly so you can be matched with people who share the same goals.",
       child: Column(
         children: _relationshipGoals.map((goal) {
           return Padding(
@@ -684,21 +684,21 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildPermissionsStep() {
     return _buildStepLayout(
-      title: "Ruhusa Muhimu",
-      subtitle: "Ruhusu huduma hizi ili tuweze kukuonyesha watu walio karibu na eneo lako na kukujulisha pindi unapopata match mpya.",
+      title: "Important Permissions",
+      subtitle: "Allow these services so we can show you people near you and notify you when you get a new match.",
       child: Column(
         children: [
           _buildPermissionSwitch(
-            title: "Location Access (Eneo)",
-            subtitle: "Inasaidia kupata na kuonyesha watu waliopo karibu nawe kijiografia.",
+            title: "Location Access",
+            subtitle: "Helps find and show people who are geographically close to you.",
             icon: Icons.location_on_rounded,
             value: _locationGranted,
             onChanged: (val) => setState(() => _locationGranted = val),
           ),
           const SizedBox(height: 16),
           _buildPermissionSwitch(
-            title: "Notifications (Taarifa)",
-            subtitle: "Kupokea ujumbe wa papo hapo na taarifa za likes kutoka kwa wengine.",
+            title: "Notifications",
+            subtitle: "Receive instant messages and notifications about likes from others.",
             icon: Icons.notifications_active_rounded,
             value: _notificationGranted,
             onChanged: (val) => setState(() => _notificationGranted = val),
@@ -765,7 +765,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    "Karibu Sana, ${_nameController.text.isNotEmpty ? _nameController.text : 'Mgeni'}!",
+                    "Welcome, ${_nameController.text.isNotEmpty ? _nameController.text : 'Guest'}!",
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 26,
@@ -781,7 +781,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      "Profile Yako Iko Tayari 100%",
+                      "Your Profile Is 100% Ready",
                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
                     ),
                   ),
@@ -819,7 +819,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             const SizedBox(height: 20),
 
             Text(
-              "Bonyeza 'Continue' hapo chini kuweka password yako ya mwisho, kisha uanze kuona watu wanaokuzunguka na kuanza safari yako ya mahusiano!",
+              "Tap 'Continue' below to set your final password, then start seeing people around you and begin your dating journey!",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5, fontWeight: FontWeight.w500),
             ),
@@ -960,13 +960,13 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                       _longitude = position.longitude;
                       onChanged(true);
                     } catch (e) {
-                      _showSnackBar("Imeshindikana kupata eneo lako: $e");
+                      _showSnackBar("Failed to get your location: $e");
                     }
                   } else if (status.isPermanentlyDenied) {
-                    _showSnackBar("Umekataa ruhusa ya Location awali. Fungua Settings kuiwezesha.");
+                    _showSnackBar("You previously denied Location permission. Open Settings to enable it.");
                     openAppSettings();
                   } else {
-                    _showSnackBar("Huwezi kuona watu walio karibu nawe bila ruhusa ya Location.");
+                    _showSnackBar("You can't see people near you without Location permission.");
                   }
                 } else if (title.contains("Notifications")) {
                   // Notification support depends on your integration plan.

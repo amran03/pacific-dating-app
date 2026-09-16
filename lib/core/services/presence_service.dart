@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'user_prefs.dart';
+
 class PresenceService {
   // Lazy on purpose: a static field initializer would call
   // Supabase.instance during class-load, before Supabase.initialize() runs,
@@ -14,9 +16,15 @@ class PresenceService {
   static String? get myUid => _myUid;
 
   static void start() {
-    _myUid = _client.auth.currentUser?.id;
-    if (_myUid == null) return;
+    final String? uid = _client.auth.currentUser?.id;
+    if (uid == null) return;
 
+    // TAYARI tunafuatilia user huyu — usianzise upya timer wala
+    // kutuma DB update (hii inapunguza network chatter kutokana na
+    // onAuthStateChange kufya kila token refresh / rebuild).
+    if (_heartbeatTimer != null && _myUid == uid) return;
+
+    _myUid = uid;
     _goOnline();
 
     _heartbeatTimer?.cancel();
@@ -36,6 +44,12 @@ class PresenceService {
 
   static Future<void> _goOnline() async {
     if (_myUid == null) return;
+    // User amezima "Show Online Status" — tunaacha is_online=false
+    // ili wengine wasimuone kama yuko online (privacy yake inaheshimiwa).
+    if (!UserPrefs.instance.showOnlineStatusEnabled) {
+      await _setPresence(_myUid!, online: false);
+      return;
+    }
     await _setPresence(_myUid!, online: true);
   }
 

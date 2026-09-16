@@ -92,7 +92,8 @@ class _NameScreenState extends State<NameScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const BirthdayScreen(),
+                        builder: (context) =>
+                            BirthdayScreen(firstName: _nameController.text.trim()),
                       ),
                     );
                   },

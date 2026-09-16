@@ -27,7 +27,7 @@ class LegalSection {
 ///  - Cards get a subtle staggered entrance animation.
 class LegalPageScaffold extends StatelessWidget {
   final String title;
-  final String swahiliTitle;
+  final String headerTitle;
   final String subtitle;
   final String lastUpdated;
   final IconData headerIcon;
@@ -36,7 +36,7 @@ class LegalPageScaffold extends StatelessWidget {
   const LegalPageScaffold({
     super.key,
     required this.title,
-    required this.swahiliTitle,
+    this.headerTitle = '',
     required this.subtitle,
     required this.lastUpdated,
     required this.headerIcon,
@@ -74,7 +74,7 @@ class LegalPageScaffold extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _HeaderCard(
-              swahiliTitle: swahiliTitle,
+              headerTitle: headerTitle.isEmpty ? title : headerTitle,
               subtitle: subtitle,
               lastUpdated: lastUpdated,
               icon: headerIcon,
@@ -108,13 +108,13 @@ class LegalPageScaffold extends StatelessWidget {
 }
 
 class _HeaderCard extends StatelessWidget {
-  final String swahiliTitle;
+  final String headerTitle;
   final String subtitle;
   final String lastUpdated;
   final IconData icon;
 
   const _HeaderCard({
-    required this.swahiliTitle,
+    required this.headerTitle,
     required this.subtitle,
     required this.lastUpdated,
     required this.icon,
@@ -166,7 +166,7 @@ class _HeaderCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              swahiliTitle,
+              headerTitle,
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,

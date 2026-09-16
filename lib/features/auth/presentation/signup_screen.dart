@@ -65,7 +65,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Akaunti imetengenezwa! Karibu."),
+          content: Text("Account created! Welcome."),
           backgroundColor: Colors.green,
         ),
       );
@@ -81,7 +81,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Hitilafu isiyotarajiwa: $e"),
+          content: Text("Unexpected error: $e"),
           backgroundColor: Colors.red,
         ),
       );
@@ -340,7 +340,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 Center(
                   child: Text.rich(
                     TextSpan(
-                      text: "Kwa kuendelea unakubali ",
+                      text: "By continuing you agree to ",
                       style: TextStyle(
                         fontSize: 12.5,
                         color: Colors.grey.shade600,

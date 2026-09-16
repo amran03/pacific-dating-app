@@ -7,6 +7,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_color.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../core/services/user_prefs.dart';
+import '../../../core/widgets/heart_loader.dart';
 import '../data/user_model.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
 
@@ -47,14 +50,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Picha ya profile imebadilishwa!"), backgroundColor: Colors.green),
+            const SnackBar(content: Text("Profile photo updated!"), backgroundColor: Colors.green),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Imeshindikana kupakia picha: $e")),
+          SnackBar(content: Text("Failed to upload photo: $e")),
         );
       }
     } finally {
@@ -69,18 +72,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Logout", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text("Je, una hakika unataka kutoka kwenye akaunti yako?"),
+        content: const Text("Are you sure you want to log out of your account?"),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Ghairi", style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () async {
               final navigator = Navigator.of(context);
               navigator.pop(); // funga dialog
               await Supabase.instance.client.auth.signOut();
-              // Tunaelekeza moja kwa moja kwenda WelcomeScreen na kufuta
+              // Tunaelekeza moja to moja kwenda WelcomeScreen na kufuta
               // stack YOTE ya nyuma
               navigator.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (context) => const WelcomeScreen()),
@@ -88,7 +91,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, elevation: 0),
-            child: const Text("Toka", style: TextStyle(color: Colors.white)),
+            child: const Text("Log Out", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -102,16 +105,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text("Delete Account", style: TextStyle(fontWeight: FontWeight.w800, color: Colors.red)),
-        content: const Text("Onyo! Kitendo hiki kitafuta kabisa akaunti yako na taarifa zote. Huwezi kuzirejesha tena."),
+        content: const Text("Warning! This will permanently delete your account and all data. You cannot undo this."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Ghairi", style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => _handleDeleteAccount(context),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red, elevation: 0),
-            child: const Text("Futa Kabisa", style: TextStyle(color: Colors.white)),
+            child: const Text("Delete Permanently", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -138,7 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Kosa: $e")));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
       }
     }
   }
@@ -191,7 +194,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 me = UserModel.fromMap(snapshot.data!.first);
               }
 
-              final String displayName = me != null ? "${me.name}, ${me.age}" : "Mtumiaji";
+              // Loading ya kisasa: moyo unaodunda wakati profile inapakiwa.
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !snapshot.hasData) {
+                return const Center(child: HeartLoader(size: 68));
+              }
+
+              final String displayName = me != null ? "${me.name}, ${me.age}" : "User";
               final String displayLocation = (me?.location != null && me!.location!.isNotEmpty)
                   ? me.location!
                   : "Tanzania";
@@ -284,12 +293,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               height: 70,
                                               decoration: BoxDecoration(
                                                 shape: BoxShape.circle,
-                                                color: Colors.black.withValues(alpha: 0.4),
+                                                color: Colors.black.withValues(alpha: 0.45),
                                               ),
-                                              child: const CircularProgressIndicator(
-                                                color: Colors.white,
-                                                strokeWidth: 2.5,
-                                              ),
+                                              // Loading ya kisasa: moyo unaodunda
+                                              child: const HeartLoader(size: 36, color: Colors.white),
                                             )
                                           else
                                             Positioned(
@@ -422,9 +429,180 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const SizedBox(height: 20),
 
-                            // --- 2. PROFILE SETTINGS & OPTIONS ---
+                            // --- 2. NOTIFICATIONS ---
                             _buildMenuSection(
-                              title: "Account & Preferences",
+                              title: "Notifications",
+                              items: [
+                                _buildSwitchTile(
+                                  icon: Icons.notifications_active_rounded,
+                                  color: Colors.teal,
+                                  title: "Arifa (Notifications)",
+                                  subtitle: "Pokaa arifa za matches, messages na gifts",
+                                  value: me?.notificationsEnabled ?? false,
+                                  onChanged: (v) => _toggleNotifications(v),
+                                ),
+                                _buildSwitchTile(
+                                  icon: Icons.vibration_rounded,
+                                  color: Colors.deepOrange,
+                                  title: "Mtikisiko (Vibration)",
+                                  subtitle: "Simu iteteme inapofika arifa mpya",
+                                  value: me?.vibrationEnabled ?? true,
+                                  onChanged: (v) =>
+                                      _saveBoolPref('vibration_enabled', v),
+                                ),
+                                _buildSwitchTile(
+                                  icon: Icons.volume_up_rounded,
+                                  color: Colors.pink,
+                                  title: "Sauti ya Arifa",
+                                  subtitle: "Sikia sauti inapofika arifa mpya",
+                                  value: me?.soundEnabled ?? true,
+                                  onChanged: (v) =>
+                                      _saveBoolPref('sound_enabled', v),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // --- 3. CHAT PREFERENCES ---
+                            _buildMenuSection(
+                              title: "Chat Preferences",
+                              items: [
+                                _buildSwitchTile(
+                                  icon: Icons.done_all_rounded,
+                                  color: Colors.green,
+                                  title: "Read Receipts (Seen Ticks)",
+                                  subtitle: "Mwenzako aone ujumbe wake umeusoma",
+                                  value: me?.readReceiptsEnabled ?? true,
+                                  onChanged: (v) => _saveBoolPref(
+                                    'read_receipts_enabled',
+                                    v,
+                                  ),
+                                ),
+                                _buildSwitchTile(
+                                  icon: Icons.keyboard_alt_outlined,
+                                  color: Colors.blueGrey,
+                                  title: "Typing Indicator",
+                                  subtitle: "Mwenzako aone unaandika ujumbe",
+                                  value: me?.typingIndicatorEnabled ?? true,
+                                  onChanged: (v) => _saveBoolPref(
+                                    'typing_indicator_enabled',
+                                    v,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // --- 4. CHAT LOCK (COINS) ---
+                            _buildMenuSection(
+                              title: "Chat Lock (Coins)",
+                              items: [
+                                _buildSwitchTile(
+                                  icon: Icons.lock_rounded,
+                                  color: AppColors.coinGold,
+                                  title: "Funga Chat to Coins",
+                                  subtitle: me != null && me.chatUnlockPrice > 0
+                                      ? 'Chat yako imefungwa — wengine wanalipa '
+                                          '${me.chatUnlockPrice} Coins kufungua mara moja tu'
+                                      : 'Chat yako ni BURE to kila mtu',
+                                  value: (me?.chatUnlockPrice ?? 0) > 0,
+                                  onChanged: (v) {
+                                    if (v) {
+                                      _showUnlockPriceDialog(
+                                        context,
+                                        me?.chatUnlockPrice ?? 0,
+                                      );
+                                    } else {
+                                      _showUnlockPriceDialog(context, 0);
+                                    }
+                                  },
+                                ),
+                                _buildMenuItem(
+                                  icon: Icons.monetization_on_rounded,
+                                  color: AppColors.coinGold,
+                                  title: "Change Unlock Price",
+                                  subtitle: me != null && me.chatUnlockPrice > 0
+                                      ? "Current price: ${me.chatUnlockPrice} Coins"
+                                      : "Set your coin price for locking chat",
+                                  onTap: () =>
+                                      _showUnlockPriceDialog(context, me?.chatUnlockPrice ?? 0),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // --- 5. PRIVACY & VISIBILITY ---
+                            _buildMenuSection(
+                              title: "Privacy & Visibility",
+                              items: [
+                                _buildSwitchTile(
+                                  icon: Icons.visibility_rounded,
+                                  color: Colors.deepPurple,
+                                  title: "Show Online Status",
+                                  subtitle: "Let others see when you are online or last seen",
+                                  value: me?.showOnlineStatusEnabled ?? true,
+                                  onChanged: (v) => _saveBoolPref(
+                                    'show_online_status_enabled',
+                                    v,
+                                  ),
+                                ),
+                                _buildSwitchTile(
+                                  icon: Icons.explore_rounded,
+                                  color: Colors.orange,
+                                  title: "Show in Discover",
+                                  subtitle: "Let new people see you on swipe cards",
+                                  value: me?.discoverable ?? true,
+                                  onChanged: (v) => _saveBoolPref('discoverable', v),
+                                ),
+                                _buildSwitchTile(
+                                  icon: Icons.location_on_rounded,
+                                  color: Colors.indigo,
+                                  title: "Show Distance (Location)",
+                                  subtitle: "Let nearby people find you on Discover",
+                                  value: me?.locationEnabled ?? false,
+                                  onChanged: (v) => _toggleLocation(v),
+                                ),
+                                _buildMenuItem(
+                                  icon: Icons.privacy_tip_rounded,
+                                  color: Colors.purple,
+                                  title: "Privacy Policy",
+                                  subtitle: "Read the rules and how we protect your data",
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // --- 6. PREMIUM & WALLET ---
+                            _buildMenuSection(
+                              title: "Premium & Wallet",
+                              items: [
+                                _buildMenuItem(
+                                  icon: Icons.workspace_premium_rounded,
+                                  color: AppColors.coinGold,
+                                  title: "VIP Badges",
+                                  subtitle: "Buy a Bronze, Gold or Diamond badge",
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => const BadgeStoreScreen(),),
+                                    ).then((_) {
+                                      setState(() {});
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+
+                            // --- 7. ACCOUNT ---
+                            _buildMenuSection(
+                              title: "Account",
                               items: [
                                 _buildMenuItem(
                                   icon: Icons.edit_rounded,
@@ -440,37 +618,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     });
                                   },
                                 ),
-                                _buildMenuItem(
-                                  icon: Icons.workspace_premium_rounded,
-                                  color: AppColors.coinGold,
-                                  title: "VIP Badges",
-                                  subtitle: "Nunua Bronze, Gold au Diamond badge",
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const BadgeStoreScreen(),),
-                                    ).then((_) {
-                                      setState(() {});
-                                    });
-                                  },
-                                ),
-                                _buildMenuItem(
-                                  icon: Icons.privacy_tip_rounded,
-                                  color: Colors.purple,
-                                  title: "Privacy Policy",
-                                  subtitle: "Soma sheria na jinsi tunavyolinda taarifa zako",
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
-                                    );
-                                  },
-                                ),
                               ],
                             ),
                             const SizedBox(height: 16),
 
-                            // --- 3. ACTIONS (LOGOUT & DELETE ACCOUNT) ---
+                            // --- 8. ACTIONS (LOGOUT & DELETE ACCOUNT) ---
                             _buildMenuSection(
                               title: "Security & Danger Zone",
                               items: [
@@ -478,14 +630,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   icon: Icons.logout_rounded,
                                   color: Colors.orange,
                                   title: "Logout",
-                                  subtitle: "Toka kwenye akaunti yako kwa sasa",
+                                  subtitle: "Log out of your account now",
                                   onTap: () => _showLogoutDialog(context),
                                 ),
                                 _buildMenuItem(
                                   icon: Icons.delete_forever_rounded,
                                   color: Colors.red,
                                   title: "Delete Account",
-                                  subtitle: "Futa kabisa akaunti na data zako zote",
+                                  subtitle: "Permanently delete your account and all your data",
                                   onTap: () => _showDeleteAccountDialog(context),
                                 ),
                               ],
@@ -500,6 +652,154 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // PROFILE SETTINGS — SWITCHES & CHAT UNLOCK PRICE
+  // ============================================================
+
+  /// Switch ya Arifa: inahifadhi DB NA ku-update NotificationService
+  /// ya papo hapo (bila kusubiri app ifungwe upya).
+  Future<void> _toggleNotifications(bool enabled) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    NotificationService.instance.setUserEnabled(enabled);
+    try {
+      await Supabase.instance.client.from('users').update({
+        'notifications_enabled': enabled,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('uid', user.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to save: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  /// Switch ya Location: inahifadhi users.location_enabled (Discover
+  /// inaitumia kuonyesha umbali wa watu walio karibu).
+  Future<void> _toggleLocation(bool enabled) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      await Supabase.instance.client.from('users').update({
+        'location_enabled': enabled,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('uid', user.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to save: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+/// Switch ya jumla: inahifadhi mapendeleo ya boolean kwenye users
+  /// (read_receipts_enabled, typing_indicator_enabled, discoverable, n.k.).
+  /// Inatumika na Profile Settings zote zenye switch.
+  Future<void> _saveBoolPref(String column, bool value) async {
+    // Cache ya papo hapo — chat/presence zinaona mabadiliko bila restart.
+    UserPrefs.instance.set(column, value);
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+    try {
+      await Supabase.instance.client.from('users').update({
+        column: value,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('uid', user.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Failed to save: $e"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Dialog ya kuweka bei (coins) ya kufungua chat na wewe — 0 = bure,
+  /// 500 = bei ya juu kabisa. Payout inaenda moja to moja kwenye wallet
+  /// yako mtu akilipa, na unlock ni YA MILELE to anayelipa.
+  Future<void> _showUnlockPriceDialog(BuildContext context, int currentPrice) async {
+    int selected = currentPrice.clamp(0, 500);
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Bei ya Kufungua Chat", style: TextStyle(fontWeight: FontWeight.w800)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Weki bei ya Pasific Coins ambayo mtu mwingine atalipa kufungua mazungumzo nawe. Malipo hayo yanakuingia kwenye wallet yako.",
+                style: TextStyle(fontSize: 13, height: 1.4),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                "$selected Coins",
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.coinGold,
+                ),
+              ),
+              Slider(
+                value: selected.toDouble(),
+                min: 0,
+                max: 500,
+                divisions: 25,
+                activeColor: AppColors.primary,
+                label: "$selected",
+                onChanged: (v) => setDialogState(() => selected = v.round()),
+              ),
+              Text(
+                selected == 0 ? "Bure — chat inafunguka moja to moja" : "Unalipwa mara mtu anapofungua",
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                // Tunachukua messenger KABLA ya await — ili tusitumie
+                // BuildContext baada ya async gap (salama to State dispose).
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.pop(dialogContext);
+                try {
+                  final user = Supabase.instance.client.auth.currentUser;
+                  if (user == null) return;
+                  await Supabase.instance.client.from('users').update({
+                    'chat_unlock_price': selected,
+                    'updated_at': DateTime.now().toIso8601String(),
+                  }).eq('uid', user.id);
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text("Bei imewekwa: $selected Coins to kufungua chat!"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text("Failed: $e"), backgroundColor: Colors.redAccent),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, elevation: 0),
+              child: const Text("Hifadhi", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -578,6 +878,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.black38),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widget ya switch (ON/OFF) — inatumika kwenye settings za arifa,
+  // location n.k. Mtindo uleule wa menu items ila na Switch badala ya arrow.
+  Widget _buildSwitchTile({
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!value),
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.black87),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w300),
+                    ),
+                  ],
+                ),
+              ),
+              Switch.adaptive(
+                value: value,
+                activeThumbColor: Colors.white,
+                activeTrackColor: AppColors.primary,
+                onChanged: onChanged,
+              ),
             ],
           ),
         ),

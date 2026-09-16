@@ -28,18 +28,51 @@ class GiftModel {
 
   factory GiftModel.fromMap(Map<String, dynamic> map) {
     return GiftModel(
-      id: map['id'] ?? '',
-      name: map['name'] ?? '',
-      emoji: map['emoji'],
-      imageUrl: map['image_url'],
-      coinPrice: map['coin_price'] ?? 0,
-      tier: map['tier'] ?? 'basic',
-      glowColor: Color(int.parse(map['glow_color'] ?? '0xFFFF4B6E')),
+      id: (map['id'] ?? '').toString(),
+      name: (map['name'] ?? '').toString(),
+      emoji: map['emoji']?.toString(),
+      imageUrl: map['image_url']?.toString(),
+      coinPrice: _parsePrice(map['coin_price']),
+      tier: (map['tier'] ?? 'basic').toString(),
+      glowColor: _parseColor(map['glow_color']),
     );
+  }
+
+  static int _parsePrice(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  static Color _parseColor(dynamic v) {
+    const fallback = Color(0xFFFF4B6E);
+    if (v == null) return fallback;
+    if (v is int) return Color(v);
+    if (v is num) return Color(v.toInt());
+    String s = v.toString().trim();
+    if (s.isEmpty) return fallback;
+    try {
+      // Ruhusu miundo: "0xFFFF4B6E", "#FF4B6E", "#FFFF4B6E", "4294907246"
+      if (s.startsWith('#')) {
+        s = s.substring(1);
+        if (s.length == 6) s = 'FF$s';
+        return Color(int.parse(s, radix: 16));
+      }
+      if (s.startsWith('0x') || s.startsWith('0X')) {
+        return Color(int.parse(s.substring(2), radix: 16));
+      }
+      // Decimal string kutoka Supabase
+      final dec = int.tryParse(s);
+      if (dec != null) return Color(dec);
+      return Color(int.parse(s, radix: 16));
+    } catch (_) {
+      return fallback;
+    }
   }
 }
 
-// Zawadi za Pacific — zimepangwa kwa tiers ili tray ionekane impressive:
+// Gifts za Pacific — zimepangwa to tiers ili tray ionekane impressive:
 // bei inapanda, glow na styling zinapanda pia (TikTok-style).
 const List<GiftModel> pasificGifts = [
   GiftModel(id: 'g1', name: 'Rose', emoji: '🌹', coinPrice: 10, tier: 'basic', glowColor: Color(0xFFFF4B6E)),

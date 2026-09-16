@@ -1,18 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Mfumo rahisi wa lugha mbili (English + Swahili) kwa Pacific Dating App.
+/// English-only language holder (kept for compatibility).
 ///
-///  - ENGLISH ndiyo lugha kuu (default).
-///  - Mtumiaji anaweza kubadilisha kuwa Swahili — chaguo lake linahifadhiwa
-///    ndani ya device (shared_preferences) na kurudishwa kiotomatiki.
-///
-/// Matumizi (usage):
-///   AppLanguage.instance.t('Create Account', sw: 'Fungua Akaunti')
-///
-/// Muundo huu wa "English text as key + optional sw translation" unaleta
-/// faida mbili: (1) code inasomeka — kila sehemu inaonyesha maandishi
-/// halisi, (2) screen mpya inaweza kupata lugha mbili kwa mstari mmoja.
+/// The app used to support English + Swahili via `t(english, sw: ...)`.
+/// It is now ENGLISH ONLY: [t] always returns the English text and the
+/// language toggle was removed. This class stays so old imports/listeners
+/// keep compiling without touching every screen.
 class AppLanguage extends ChangeNotifier {
   AppLanguage._();
   static final AppLanguage instance = AppLanguage._();
@@ -21,51 +15,36 @@ class AppLanguage extends ChangeNotifier {
 
   String _code = 'en';
 
-  /// 'en' au 'sw'
+  /// Always 'en'.
   String get code => _code;
 
-  bool get isSwahili => _code == 'sw';
+  bool get isSwahili => false;
 
-  /// Jina la lugha inayoonekana kwenye toggle.
-  String get label => isSwahili ? 'Swahili' : 'English';
+  /// Visible label (always English now).
+  String get label => 'English';
 
-  /// Inasoma lugha iliyohifadhiwa — inaitwa mara moja kwenye main().
+  /// Reads saved language — always normalizes to English.
   Future<void> load() async {
+    _code = 'en';
     try {
       final prefs = await SharedPreferences.getInstance();
-      final String? saved = prefs.getString(_prefKey);
-      if (saved == 'sw' || saved == 'en') {
-        _code = saved!;
-      }
-    } catch (_) {
-      // Kama storage imeshindikana, tunabaki na English default.
+      await prefs.setString(_prefKey, 'en');
+    } catch (_) {}
+  }
+
+  /// Kept for compatibility — stays English.
+  Future<void> setEnglish() async {
+    if (_code != 'en') {
       _code = 'en';
+      notifyListeners();
     }
   }
 
-  /// Kubadilisha lugha — inaahidi (persist) na ku-notify screens zote.
-  Future<void> setEnglish() => _set('en');
-
-  Future<void> setSwahili() => _set('sw');
-
-  Future<void> _set(String code) async {
-    if (_code == code) return;
-    _code = code;
-    notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_prefKey, code);
-    } catch (_) {
-      // Persistence ikishindikana, lugha inabaki mpaka app ifungwe tena.
-    }
+  /// Kept for compatibility — Swahili is disabled, stays English.
+  Future<void> setSwahili() async {
+    await setEnglish();
   }
 
-  /// Tafsiri: English ni default; Swahili inatumika ikiwa imechaguliwa na
-  /// tafsiri ipo.
-  String t(String english, {String? sw}) {
-    if (isSwahili && sw != null && sw.trim().isNotEmpty) {
-      return sw;
-    }
-    return english;
-  }
+  /// English only: always returns [english].
+  String t(String english, {String? sw}) => english;
 }

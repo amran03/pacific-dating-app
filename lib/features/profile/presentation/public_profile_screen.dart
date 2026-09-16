@@ -6,15 +6,71 @@ import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/widgets/profile_image_with_ring.dart';
 import 'package:pacific_dating_app/features/chat/presentation/individual_chat_screen.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 
 /// Inaonyesha profile KAMILI ya mtumiaji MWINGINE (sio ya mwenyewe).
 /// Inafunguliwa kutoka Discover card, Likes grid, au Chat header.
 /// Ni real-time - kama huyo mtumiaji akibadilisha bio/picha yake,
 /// itasasika hapa papo hapo bila kufunga na kufungua tena.
-class PublicProfileScreen extends StatelessWidget {
+///
+/// Sehemu ya juu ya profile inaonyesha pia:
+///  - idadi ya Likes alizopokea (❤️)
+///  - zawadi kubwa (top gifts to thamani) alizopokea (🎁)
+///  - rating ya nyota (⭐ wastani + idadi ya wapimaji, na nyota 5 za kupima)
+class PublicProfileScreen extends StatefulWidget {
   final String uid;
 
   const PublicProfileScreen({super.key, required this.uid});
+
+  @override
+  State<PublicProfileScreen> createState() => _PublicProfileScreenState();
+}
+
+class _PublicProfileScreenState extends State<PublicProfileScreen> {
+  Map<String, dynamic>? _stats;
+  List<Map<String, dynamic>> _topGifts = [];
+  bool _ratingBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    try {
+      final svc = MatchmakingService();
+      final stats = await svc.fetchUserStats(widget.uid);
+      final top = await svc.fetchTopGiftsReceived(widget.uid, limit: 3);
+      if (!mounted) return;
+      setState(() {
+        _stats = stats;
+        _topGifts = top;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _rate(int stars) async {
+    if (_ratingBusy) return;
+    setState(() => _ratingBusy = true);
+    try {
+      await MatchmakingService().rateUser(widget.uid, stars);
+      await _loadStats();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('You gave $stars! ⭐')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to send rating. Please try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _ratingBusy = false);
+    }
+  }
 
   Future<void> _openChat(BuildContext context, UserModel user) async {
     final matchmakingService = MatchmakingService();
@@ -24,7 +80,7 @@ class PublicProfileScreen extends StatelessWidget {
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
+        child: HeartLoader(size: 52),
       ),
     );
 
@@ -39,10 +95,10 @@ class PublicProfileScreen extends StatelessWidget {
     if (context.mounted) Navigator.pop(context); // funga loading
     if (!context.mounted) return;
 
-    final bool alreadyUnlocked = accessInfo['unlocked'] as bool;
-    final int price = accessInfo['price'] as int;
+    final bool alreadyUnlocked = (accessInfo['unlocked'] as bool?) ?? true;
+    final int price = (accessInfo['price'] as num?)?.toInt() ?? 0;
 
-    // Tayari imefunguliwa AU ni bure kabisa - endelea moja kwa moja
+    // Tayari imefunguliwa AU ni bure kabisa - endelea moja to moja
     if (alreadyUnlocked || price <= 0) {
       if (!alreadyUnlocked) {
         try {
@@ -60,19 +116,19 @@ class PublicProfileScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Fungua Mazungumzo"),
+        title: const Text("Unlock Chat"),
         content: Text(
-          "${user.name} anahitaji Coins $price kufungua mazungumzo naye kwa mara ya kwanza. Baada ya hapo mtaweza kuongea bila malipo tena.",
+          "${user.name} requires $price Coins to open a chat with you for the first time. After that you can chat for free.",
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text("Ghairi", style: TextStyle(color: Colors.grey)),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-            child: Text("Lipa $price", style: const TextStyle(color: Colors.white)),
+            child: Text("Pay $price", style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -89,8 +145,8 @@ class PublicProfileScreen extends StatelessWidget {
           SnackBar(
             content: Text(
               e.toString().contains('INSUFFICIENT_COINS')
-                  ? "Huna Coins za kutosha. Nenda Profile -> Top Up."
-                  : "Imeshindikana kufungua chat: $e",
+                  ? "You do not have enough Coins. Go to Profile -> Top Up."
+                  : "Failed to open chat: $e",
             ),
           ),
         );
@@ -155,11 +211,11 @@ class PublicProfileScreen extends StatelessWidget {
         stream: Supabase.instance.client
             .from('users')
             .stream(primaryKey: ['uid'])
-            .eq('uid', uid)
+            .eq('uid', widget.uid)
             .limit(1),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+            return const Center(child: HeartLoader(size: 62));
           }
 
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
@@ -287,8 +343,11 @@ class PublicProfileScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // ---- STATS: Likes + Gifts + Rating (sehemu ya profile) ----
+                      _buildStatsCard(user),
+                      const SizedBox(height: 20),
                       if (user.bio != null && user.bio!.isNotEmpty) ...[
-                        const Text("Kuhusu Yangu", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                        const Text("About Me", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                         const SizedBox(height: 8),
                         Text(user.bio!, style: const TextStyle(color: Colors.black87, height: 1.5)),
                         const SizedBox(height: 24),
@@ -396,7 +455,183 @@ class PublicProfileScreen extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: AppColors.primary),
           const SizedBox(width: 6),
-          Text(label, style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600, fontSize: 13)),
+          Text(label,
+              style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13)),
+        ],
+      ),
+    );
+  }
+
+  Widget _statTile(
+      {required IconData icon,
+      required Color color,
+      required String value,
+      required String label}) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(9),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 6),
+        Text(value,
+            style: const TextStyle(
+                fontWeight: FontWeight.w900, fontSize: 17)),
+        Text(label,
+            style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
+  Widget _buildStarsRow(int myStars) {
+    return Row(
+      children: [
+        const Text('Mpe rating:',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+        const SizedBox(width: 8),
+        ...List.generate(5, (i) {
+          final star = i + 1;
+          final filled = star <= myStars;
+          return InkWell(
+            onTap: _ratingBusy ? null : () => _rate(star),
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Icon(
+                filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                color: const Color(0xFFFFB800),
+                size: 30,
+              ),
+            ),
+          );
+        }),
+        if (_ratingBusy) ...[
+          const SizedBox(width: 8),
+          const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Kadi ya takwimu: Likes | Gifts (kubwa 3) | Rating + nyota za kupima.
+  Widget _buildStatsCard(UserModel user) {
+    final int likes = user.likesReceivedCount > 0
+        ? user.likesReceivedCount
+        : ((_stats?['likes'] as int?) ?? 0);
+    final int giftsCount = user.giftsReceivedCount > 0
+        ? user.giftsReceivedCount
+        : ((_stats?['giftsCount'] as int?) ?? 0);
+    final int giftsValue = user.giftsReceivedValue > 0
+        ? user.giftsReceivedValue
+        : ((_stats?['giftsValue'] as int?) ?? 0);
+    double avg = user.averageRating;
+    int rCount = user.ratingCount;
+    if (rCount == 0 && _stats != null) {
+      avg = (_stats!['avgRating'] as num?)?.toDouble() ?? 0;
+      rCount = (_stats!['ratingCount'] as int?) ?? 0;
+    }
+    final int myStars = (_stats?['myStars'] as int?) ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _statTile(
+                  icon: Icons.favorite_rounded,
+                  color: const Color(0xFFFF4B6E),
+                  value: '$likes',
+                  label: 'Likes',
+                ),
+              ),
+              Container(width: 1, height: 44, color: Colors.grey.shade200),
+              Expanded(
+                child: _statTile(
+                  icon: Icons.card_giftcard_rounded,
+                  color: const Color(0xFFFFB800),
+                  value: '$giftsCount',
+                  label: giftsValue > 0 ? 'Gifts (🪙 $giftsValue)' : 'Gifts',
+                ),
+              ),
+              Container(width: 1, height: 44, color: Colors.grey.shade200),
+              Expanded(
+                child: _statTile(
+                  icon: Icons.star_rounded,
+                  color: const Color(0xFFFFB800),
+                  value: rCount > 0 ? avg.toStringAsFixed(1) : '—',
+                  label: rCount > 0 ? 'Rating ($rCount)' : 'Rating',
+                ),
+              ),
+            ],
+          ),
+          if (_topGifts.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('Top gifts received',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _topGifts.map((g) {
+                final String emoji =
+                    (g['gift_emoji']?.toString().isNotEmpty ?? false)
+                        ? g['gift_emoji'].toString()
+                        : '🎁';
+                final String name =
+                    (g['gift_name']?.toString().isNotEmpty ?? false)
+                        ? g['gift_name'].toString()
+                        : 'Gifts';
+                final int cost =
+                    ((g['coin_cost'] as num?)?.toInt() ?? 0);
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB800).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: const Color(0xFFFFB800)
+                            .withValues(alpha: 0.35)),
+                  ),
+                  child: Text('$emoji $name • 🪙 $cost',
+                      style: const TextStyle(
+                          fontSize: 12.5, fontWeight: FontWeight.w700)),
+                );
+              }).toList(),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+          _buildStarsRow(myStars),
         ],
       ),
     );

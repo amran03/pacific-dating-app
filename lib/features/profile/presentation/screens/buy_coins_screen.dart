@@ -24,17 +24,17 @@ const List<_CoinPackage> _kCoinPackages = [
 
 /// Skrini ya kununua Coins. 1 Coin = 100 TSH.
 ///
-/// MUHIMU (soma kabla ya ku-deploy kibiashara): Skrini hii kwa sasa
-/// inaunganisha moja kwa moja na Supabase kuongeza coins BILA malipo
+/// MUHIMU (soma kabla ya ku-deploy kibiashara): Skrini hii to sasa
+/// inaunganisha moja to moja na Supabase kuongeza coins BILA malipo
 /// halisi ya pesa - ni MODE YA MAJARIBIO ili uweze kujaribu mtiririko
-/// mzima wa app yako (coins zikitumika kwa gifts n.k.) bila kusubiri
+/// mzima wa app yako (coins zikitumika to gifts n.k.) bila kusubiri
 /// malipo halisi kuunganishwa.
 ///
 /// Kuunganisha malipo halisi (M-Pesa, Tigo Pesa, Airtel Money, au Card
 /// kupitia Stripe/Flutterwave/Selcom) kunahitaji: (1) akaunti ya
 /// mtoa-huduma wa malipo, (2) Edge Function ya kuthibitisha malipo
 /// upande wa server kabla ya kuongeza coins (ili mtu asiweze kudanganya
-/// app kwa kuruka malipo). Hilo ni hatua inayofuata - niambie ukiwa
+/// app to kuruka malipo). Hilo ni hatua inayofuata - niambie ukiwa
 /// tayari kuchagua mtoa-huduma wa malipo, nitakusaidia kuiunganisha.
 class BuyCoinsScreen extends StatefulWidget {
   const BuyCoinsScreen({super.key});
@@ -77,12 +77,12 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
         'coins': currentCoins + package.coins,
       }).eq('uid', user.id);
 
-      // Rekodi ununuzi kwa historia + arifa (NotificationScreen inaisoma hii)
+      // Rekodi ununuzi to historia + arifa (NotificationScreen inaisoma hii)
       await client.from('notifications').insert({
         'to_uid': user.id,
         'type': 'coins',
-        'title': 'Coins Zimeongezwa! 🪙',
-        'description': 'Umefanikiwa kununua ${package.coins} Coins.',
+        'title': 'Coins Added! 🪙',
+        'description': 'You successfully bought ${package.coins} Coins.',
         'created_at': DateTime.now().toIso8601String(),
         'read': false,
       });
@@ -98,7 +98,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Umefanikiwa kuongeza ${package.coins} Coins! 🎉"),
+          content: Text("Successfully added ${package.coins} Coins! 🎉"),
           backgroundColor: Colors.green,
         ),
       );
@@ -106,7 +106,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Imeshindikana: $e")),
+          SnackBar(content: Text("Failed: $e")),
         );
       }
     } finally {
@@ -129,7 +129,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Nunua Coins",
+          "Buy Coins",
           style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 20),
         ),
         centerTitle: true,
@@ -279,7 +279,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                               height: 16,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                                : const Text("Nunua", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                : const Text("Buy", style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
                         ),
                       ],

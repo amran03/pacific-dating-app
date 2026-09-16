@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Hakikisha njia hii ya import inaendana na ulipoweka faili lako la WelcomeScreen
+// Keep import so AppLanguage stays initialized; UI is English-only now.
 import 'core/localization/app_language.dart';
 import 'core/localization/app_theme.dart';
 import 'core/services/auth_gate.dart';
+import 'core/services/call_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/presence_tracker.dart';
 import 'core/services/supabase_service.dart';
@@ -32,12 +33,14 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
-    // FIX: Lugha (EN/SW) na THEME (Light/Dark) ni ChangeNotifiers.
-    // Tuna nested ListenableBuilders ili zis RESET navigation stack.
-    // Kila mabadiliko, tunarebuild wrapper (theme/locale), lakini
-    // Navigator yenyewe inabaki salama kwenye child yake.
+    // Theme is a ChangeNotifier. Language is English-only (AppLanguage is
+    // kept only for compatibility) — single listener so the navigation
+    // stack is never reset.
     return ListenableBuilder(
       listenable: AppLanguage.instance,
       builder: (context, _) {
@@ -47,9 +50,10 @@ class MyApp extends StatelessWidget {
             return MaterialApp(
               title: 'Pacific Dating App',
               debugShowCheckedModeBanner: false,
+              navigatorKey: CallService.instance.navigatorKey,
 
-              // FONT: Poppins — font nzuri, ya kisasa na inasomeka vizuri.
-              // Inatumiwa na screens ZOTE za app kwa default.
+              // FONT: Poppins — modern, readable, used by ALL screens.
+              // Used by ALL app screens by default.
               theme: ThemeData(
                 useMaterial3: true,
                 colorScheme: ColorScheme.fromSeed(
@@ -61,9 +65,8 @@ class MyApp extends StatelessWidget {
                 textTheme: GoogleFonts.poppinsTextTheme(),
               ),
 
-              // FIX: Builder wrapper — navigation stack hairebuild-i
-              // wakati theme/language inabadilika. Hii inaepusha bug ya
-              // kurudishwa welcome screen kila mtumiaji anapobadilisha lugha.
+              // Builder wrapper — navigation stack is not rebuilt when the
+              // theme changes. This avoids pushing back to welcome screen.
               builder: (context, child) {
                 return Stack(
                   children: [

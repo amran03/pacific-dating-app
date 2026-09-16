@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacific_dating_app/core/localization/app_language.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 import 'package:pacific_dating_app/core/services/supabase_service.dart';
 import 'package:pacific_dating_app/core/widgets/supabase_setup_screen.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
@@ -27,9 +28,7 @@ class AuthGate extends StatelessWidget {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(
-                  child: CircularProgressIndicator(
-                    color: Color(0xFFFF4B72),
-                  ),
+                  child: HeartLoader(size: 72),
                 ),
               );
             }
@@ -49,9 +48,7 @@ class AuthGate extends StatelessWidget {
                   if (userSnapshot.connectionState == ConnectionState.waiting) {
                     return const Scaffold(
                       body: Center(
-                        child: CircularProgressIndicator(
-                          color: Color(0xFFFF4B72),
-                        ),
+                        child: HeartLoader(size: 72),
                       ),
                     );
                   }

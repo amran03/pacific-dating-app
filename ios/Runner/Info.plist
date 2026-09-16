@@ -26,6 +26,17 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone inahitajika kwa ajili ya simu za sauti (voice calls) na voice notes.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera inahitajika kwa ajili ya simu za video na kupakia picha za profile.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library inahitajika kuchagua picha za profile na chat.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>voip</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

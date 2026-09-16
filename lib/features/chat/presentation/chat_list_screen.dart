@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_color.dart';
 import '../../../core/services/matchmaking_service.dart';
 import '../../../core/services/core_error_service.dart';
+import '../../../core/widgets/heart_loader.dart';
 import '../../chat/domain/models/chat_model.dart';
 import '../../profile/presentation/public_profile_screen.dart';
 import 'individual_chat_screen.dart';
@@ -16,6 +17,21 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final MatchmakingService _matchmakingService = MatchmakingService();
+
+  /// Moja ya logic ya kufungua chat (inatumika na list, matches na
+  /// missed calls): locked -> dialog ya coins, wazi -> moja to moja.
+  void _openChat(ChatModel chat) {
+    if (chat.isLocked) {
+      _showUnlockDialog(chat);
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => IndividualChatScreen(chat: chat),
+        ),
+      );
+    }
+  }
 
   void _showUnlockDialog(ChatModel chat) {
     showDialog(
@@ -59,7 +75,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    "Maongezi haya yatafungwa pindi dakika 30 zikiisha. Tuma Gift au tumia ${chat.unlockCostCoins} Pasific Coins ili kufungua maongezi ya daima!",
+                    "Tumia ${chat.unlockCostCoins} Pasific Coins kufungua maongezi haya. Malipo ni ya MARA MOJA — chat inabaki wazi milele!",
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.black54, fontSize: 13, height: 1.4, fontWeight: FontWeight.w300),
                   ),
@@ -157,16 +173,16 @@ class _ChatListScreenState extends State<ChatListScreen> {
             stream: _matchmakingService.streamMyChatRooms(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+                return const Center(child: HeartLoader(size: 64));
               }
 
               if (snapshot.hasError) {
-                // Hapa tunaonyesha kosa kama stream imeshindikana kupakua data kutoka Supabase
+                // Show an error if the chat-rooms stream fails to load from Supabase.
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(24.0),
                     child: Text(
-                      "Imeshindikana kupakua mazungumzo: ${snapshot.error}",
+                      "Failed to load conversations: ${snapshot.error}",
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.redAccent),
                     ),
@@ -244,6 +260,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         ),
                       ),
                     ],
+                  ),
+
+                  // ---- MISSED CALLS SECTION ----
+                  _MissedCallsSection(
+                    onOpenChat: _openChat,
+                    onOpenLockedChat: _showUnlockDialog,
                   ),
 
                   SliverToBoxAdapter(
@@ -471,6 +493,230 @@ class _ChatListScreenState extends State<ChatListScreen> {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================
+// MISSED CALLS SECTION
+// Inaonyesha simu zilizokosekana/kataliwa (kutoka notifications za
+// type 'missed_call'). Row HAIFUTWI — inaashirwa imesomwa (read=true)
+// mtumiaji akishaigusa, na inabaki kwenye history ikiwa greyed.
+// ============================================================
+class _MissedCallsSection extends StatelessWidget {
+  final MatchmakingService _service = MatchmakingService();
+  final void Function(ChatModel chat) onOpenChat;
+  final void Function(ChatModel chat) onOpenLockedChat;
+
+  _MissedCallsSection({
+    required this.onOpenChat,
+    required this.onOpenLockedChat,
+  });
+
+  String _timeAgo(dynamic ts) {
+    DateTime? dt;
+    if (ts is String) dt = DateTime.tryParse(ts);
+    if (dt == null) return '';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${diff.inDays}d';
+  }
+
+  Future<void> _openMissedCall(Map<String, dynamic> call) async {
+    final String id = call['id']?.toString() ?? '';
+    final String peerUid = call['from_uid']?.toString() ?? '';
+    if (peerUid.isEmpty) return;
+
+    // Inaashiria imesomwa MARA MOJA — row inabaki (haitafutwi).
+    if (id.isNotEmpty) await _service.markNotificationRead(id);
+
+    final access = await _service.getChatAccessInfo(peerUid);
+    final bool unlocked = access['unlocked'] == true;
+    final int price = (access['price'] ?? 0) as int;
+
+    final chat = ChatModel(
+      id: peerUid,
+      name: call['from_name']?.toString().isNotEmpty == true
+          ? call['from_name'].toString()
+          : 'User',
+      avatarUrl: '',
+      lastMessage: call['description']?.toString() ?? '',
+      timeSent: _timeAgo(call['created_at']),
+      isLocked: !unlocked,
+      unlockCostCoins: price,
+    );
+
+    if (unlocked) {
+      onOpenChat(chat);
+    } else {
+      onOpenLockedChat(chat);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _service.streamMissedCalls(),
+        builder: (context, snapshot) {
+          final calls = snapshot.data ?? [];
+          // None missed calls — section hazionyeshwi kabisa.
+          if (calls.isEmpty) return const SizedBox.shrink();
+
+          final int unreadCount =
+              calls.where((c) => c['read'] != true).length;
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 0, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Text(
+                      'Missed Calls',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    if (unreadCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 92,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.only(right: 16),
+                    itemCount: calls.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final call = calls[index];
+                      final bool isRead = call['read'] == true;
+                      final bool isDeclined =
+                          (call['title']?.toString() ?? '')
+                              .contains('declined');
+
+                      return Opacity(
+                        // Imesomwa -> inaonekana "faded" kama history.
+                        opacity: isRead ? 0.55 : 1.0,
+                        child: GestureDetector(
+                          onTap: () => _openMissedCall(call),
+                          child: Container(
+                            width: 150,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.9),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: isRead
+                                    ? Colors.grey.shade200
+                                    : Colors.redAccent
+                                        .withValues(alpha: 0.35),
+                                width: isRead ? 1 : 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.redAccent
+                                            .withValues(alpha: 0.12),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        isDeclined
+                                            ? Icons.phone_disabled_rounded
+                                            : Icons.phone_missed_rounded,
+                                        color: Colors.redAccent,
+                                        size: 18,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (!isRead)
+                                      Container(
+                                        width: 8,
+                                        height: 8,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.redAccent,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const Spacer(),
+                                Text(
+                                  call['from_name']?.toString().isNotEmpty ==
+                                          true
+                                      ? call['from_name'].toString()
+                                      : 'User',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                Text(
+                                  '${_timeAgo(call['created_at'])} • ${isDeclined ? 'Declined' : 'Missed'}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color:
+                                        isRead ? Colors.grey : Colors.redAccent,
+                                    fontWeight: isRead
+                                        ? FontWeight.w400
+                                        : FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -28,8 +28,25 @@ class UserModel {
   final int chatUnlockPrice;
   final bool locationEnabled;
   final bool notificationsEnabled;
+  final bool vibrationEnabled;
+  final bool soundEnabled;
+  // Mapendeleo ya faragha (Profile > Settings)
+  final bool readReceiptsEnabled;
+  final bool typingIndicatorEnabled;
+  final bool showOnlineStatusEnabled;
+  final bool discoverable;
   final bool isOnline;
   final bool isProfileComplete;
+  // Takwimu za umma (counters kutoka triggers za Supabase):
+  // likes/gifts alizopokea + rating (wastani = ratingSum / ratingCount).
+  final int likesReceivedCount;
+  final int giftsReceivedCount;
+  final int giftsReceivedValue;
+  final int ratingSum;
+  final int ratingCount;
+
+  /// Wastani wa nyota (0 kama bado hajapimwa).
+  double get averageRating => ratingCount > 0 ? ratingSum / ratingCount : 0.0;
 
   UserModel({
     required this.uid,
@@ -59,8 +76,19 @@ class UserModel {
     this.chatUnlockPrice = 0,
     this.locationEnabled = false,
     this.notificationsEnabled = false,
+    this.vibrationEnabled = true,
+    this.soundEnabled = true,
+    this.readReceiptsEnabled = true,
+    this.typingIndicatorEnabled = true,
+    this.showOnlineStatusEnabled = true,
+    this.discoverable = true,
     this.isOnline = false,
     this.isProfileComplete = false,
+    this.likesReceivedCount = 0,
+    this.giftsReceivedCount = 0,
+    this.giftsReceivedValue = 0,
+    this.ratingSum = 0,
+    this.ratingCount = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -93,8 +121,18 @@ class UserModel {
       'chat_unlock_price': chatUnlockPrice,
       'location_enabled': locationEnabled,
       'notifications_enabled': notificationsEnabled,
+      'vibration_enabled': vibrationEnabled,
+      'sound_enabled': soundEnabled,
+      'read_receipts_enabled': readReceiptsEnabled,
+      'typing_indicator_enabled': typingIndicatorEnabled,
+      'show_online_status_enabled': showOnlineStatusEnabled,
+      'discoverable': discoverable,
       'is_online': isOnline,
       'is_profile_complete': isProfileComplete,
+      // NOTE: counters (likes_received_count n.k.) HAZIANDIKWI na client —
+      // zinasimamiwa na triggers za Supabase (server-side). Kuziweka kwenye
+      // upsert kungevunja saveUserProfile kwenye DB ya zamani (column
+      // doesn't exist) na kunge-overwrite hesabu sahihi. Zinasomwa tu.
       'updated_at': DateTime.now().toIso8601String(),
     };
   }
@@ -116,20 +154,31 @@ class UserModel {
       latitude: (map['latitude'] as num?)?.toDouble(),
       longitude: (map['longitude'] as num?)?.toDouble(),
       fcmToken: map['fcm_token'],
-      coins: map['coins'] ?? 0,
+      coins: (map['coins'] as num?)?.toInt() ?? 0,
       badgeTier: map['badge_tier'] ?? 'none',
-      totalSpentCoins: map['total_spent_coins'] ?? 0,
+      totalSpentCoins: (map['total_spent_coins'] as num?)?.toInt() ?? 0,
       heightCm: map['height_cm'],
       education: map['education'],
       occupation: map['occupation'],
       interests: map['interests'] != null ? List<String>.from(map['interests']) : const [],
       smokingHabit: map['smoking_habit'],
       drinkingHabit: map['drinking_habit'],
-      chatUnlockPrice: map['chat_unlock_price'] ?? 0,
+      chatUnlockPrice: (map['chat_unlock_price'] as num?)?.toInt() ?? 0,
       locationEnabled: map['location_enabled'] ?? false,
       notificationsEnabled: map['notifications_enabled'] ?? false,
+      vibrationEnabled: map['vibration_enabled'] ?? true,
+      soundEnabled: map['sound_enabled'] ?? true,
+      readReceiptsEnabled: map['read_receipts_enabled'] ?? true,
+      typingIndicatorEnabled: map['typing_indicator_enabled'] ?? true,
+      showOnlineStatusEnabled: map['show_online_status_enabled'] ?? true,
+      discoverable: map['discoverable'] ?? true,
       isOnline: map['is_online'] ?? false,
       isProfileComplete: map['is_profile_complete'] ?? false,
+      likesReceivedCount: (map['likes_received_count'] as num?)?.toInt() ?? 0,
+      giftsReceivedCount: (map['gifts_received_count'] as num?)?.toInt() ?? 0,
+      giftsReceivedValue: (map['gifts_received_value'] as num?)?.toInt() ?? 0,
+      ratingSum: (map['rating_sum'] as num?)?.toInt() ?? 0,
+      ratingCount: (map['rating_count'] as num?)?.toInt() ?? 0,
     );
   }
 

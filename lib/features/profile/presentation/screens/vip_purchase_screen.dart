@@ -4,9 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/services/vip_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 
 /// Screen inayomruhusu mtumiaji kuona coins alizonazo, tier yake ya sasa,
-/// na kununua VIP Badge (Bronze / Gold / Diamond) kwa kutumia VIPService
+/// na kununua VIP Badge (Bronze / Gold / Diamond) to kutumia VIPService
 /// iliyopo tayari.
 class VIPPurchaseScreen extends StatefulWidget {
   const VIPPurchaseScreen({super.key});
@@ -19,7 +20,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
   final VIPService _vipService = VIPService();
   final CoreErrorService _errorService = CoreErrorService();
 
-  // Tier inayonunuliwa kwa sasa (kuzuia mtumiaji kubonyeza mara mbili)
+  // Tier inayonunuliwa to sasa (kuzuia mtumiaji kubonyeza mara mbili)
   String? _purchasingTier;
 
   String get _uid => Supabase.instance.client.auth.currentUser!.id;
@@ -44,7 +45,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Hongera! Umenunua ${VIPService.tiers[tier]!['name']} 🎉"),
+          content: Text("Congratulations! You bought the ${VIPService.tiers[tier]!['name']} 🎉"),
           backgroundColor: Colors.green,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -71,7 +72,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
         stream: client.from('users').stream(primaryKey: ['uid']).eq('uid', _uid),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: HeartLoader(size: 62));
           }
 
           final data = snapshot.data!.isNotEmpty ? snapshot.data!.first : null;
@@ -95,13 +96,13 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                       children: [
                         const Icon(Icons.monetization_on_rounded, color: AppColors.coinGold),
                         const SizedBox(width: 8),
-                        Text("Salio lako: $coins Coins",
+                        Text("Your balance: $coins Coins",
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "Tier ya sasa: ${currentTier == 'none' ? 'Hakuna' : currentTier.toUpperCase()}",
+                      "Current tier: ${currentTier == 'none' ? 'None' : currentTier.toUpperCase()}",
                       style: TextStyle(color: Colors.grey.shade700),
                     ),
                   ],
@@ -151,7 +152,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                                         fontSize: 15, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 2),
                                 Text(
-                                  "Bei: $cost Coins  •  Salio la chini: $minBalance",
+                                  "Price: $cost Coins  •  Minimum balance: $minBalance",
                                   style: TextStyle(
                                       fontSize: 12, color: Colors.grey.shade600),
                                 ),
@@ -178,7 +179,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2, color: Colors.white),
                               )
-                                  : const Text("Nunua"),
+                                  : const Text("Buy"),
                             ),
                           ),
                         ],

@@ -21,7 +21,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Tafadhali ingiza email yako kwanza."),
+          content: Text("Please enter your email first."),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -50,7 +50,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Kosa: $e"), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
         );
       }
     }
@@ -316,7 +316,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
           ),
           const SizedBox(height: 20),
           const Text(
-            "Tumetuma Email 📧",
+            "Email Sent 📧",
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
@@ -325,7 +325,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
           ),
           const SizedBox(height: 10),
           const Text(
-            "Tafadhali kagua email yako kwa ajili ya link ya kubadilisha password.",
+            "Please check your email for the password reset link.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -362,7 +362,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
                   ),
                 ),
                 child: const Text(
-                  "Sawa",
+                  "OK",
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

@@ -1,30 +1,38 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/app_color.dart';
+import '../../../core/services/call_service.dart';
 
 enum CallType { audio, video }
 
 enum CallPhase { ringing, connecting, ongoing, ended }
 
-/// Polished voice/video call screen for Pacific Dating App.
+/// Real voice/video call screen (WebRTC).
 ///
-/// NOTE: The project currently has no calling SDK (no WebRTC/AGORA) in
-/// pubspec.yaml, so this screen provides the full premium call UI with a
-/// simulated connection lifecycle (ringing -> connecting -> ongoing).
-/// Wiring a real backend only requires replacing the simulation in
-/// [_startOutgoingFlow] / [_accept] with real signalling.
+/// Signaling inafanyika kupitia Supabase Realtime Broadcast kwenye channel ya
+/// pamoja `call:<callId>` — events: accept / offer / answer / ice / decline /
+/// end. Media inapita P2P to WebRTC (Google STUN; to mitandao ya ngumu
+/// zaidi weka TURN server kwenye _peerConfig chini).
+/// Incoming rings zinakuja kupitia CallService (channel ya faragha `call:<uid>`).
 class CallScreen extends StatefulWidget {
   final CallType callType;
   final String peerName;
   final String? peerAvatarUrl;
   final bool isOutgoing;
+  final String peerUid;
+  final String callId;
 
   const CallScreen({
     super.key,
     required this.callType,
     required this.peerName,
+    required this.peerUid,
+    required this.callId,
     this.peerAvatarUrl,
     this.isOutgoing = true,
   });
@@ -33,6 +41,8 @@ class CallScreen extends StatefulWidget {
     BuildContext context, {
     required CallType callType,
     required String peerName,
+    required String peerUid,
+    required String callId,
     String? peerAvatarUrl,
     bool isOutgoing = true,
   }) {
@@ -50,6 +60,8 @@ class CallScreen extends StatefulWidget {
             peerName: peerName,
             peerAvatarUrl: peerAvatarUrl,
             isOutgoing: isOutgoing,
+            peerUid: peerUid,
+            callId: callId,
           ),
         ),
       ),
@@ -67,14 +79,36 @@ class _CallScreenState extends State<CallScreen>
 
   CallPhase _phase = CallPhase.ringing;
   int _seconds = 0;
-  Timer? _phaseTimer;
+  Timer? _noAnswerTimer;
   Timer? _durationTimer;
 
   bool _isMuted = false;
   bool _isSpeakerOn = false;
   bool _isVideoEnabled = true;
 
+  // ---- WebRTC ----
+  RTCPeerConnection? _pc;
+  MediaStream? _localStream;
+  MediaStream? _remoteStream;
+  final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
+  final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+  RealtimeChannel? _channel;
+  bool _localVideoReady = false;
+  bool _accepted = false; // callee: mtumiaji amebonyeza Accept
+  bool _tornDown = false;
+  String _callerName = 'Pacific user'; // jina la caller (kwa missed-call log)
+
   bool get _isVideo => widget.callType == CallType.video;
+
+  // STUN ya Google inatosha to karibuni mitandao. Kwa NAT kali (corporate
+  // n.k.) ongeza TURN server hapa: {'urls': 'turn:...','username':...,'credential':...}
+  static const Map<String, dynamic> _peerConfig = {
+    'iceServers': [
+      {'urls': 'stun:stun.l.google.com:19302'},
+      {'urls': 'stun:stun1.l.google.com:19302'},
+    ],
+    'sdpSemantics': 'unified-plan',
+  };
 
   @override
   void initState() {
@@ -92,35 +126,296 @@ class _CallScreenState extends State<CallScreen>
     _pulseController.repeat();
     _dotsController.repeat();
 
+    _localRenderer.initialize();
+    _remoteRenderer.initialize();
+
     if (widget.isOutgoing) {
-      _startOutgoingFlow();
+      _startOutgoingCall();
     }
   }
 
-  void _startOutgoingFlow() {
-    _phaseTimer?.cancel();
-    _phaseTimer = Timer(const Duration(seconds: 3), () {
-      if (!mounted) return;
-      setState(() => _phase = CallPhase.connecting);
-      _phaseTimer = Timer(const Duration(seconds: 2), () {
-        if (!mounted) return;
-        _goOngoing();
+  // ============================================================
+  // OUTGOING CALL — media + peer connection + ring
+  // ============================================================
+
+  Future<void> _startOutgoingCall() async {
+    final ok = await _prepareMediaAndPeer();
+    if (!ok || !mounted) return;
+
+    // Jina/picha ya CALLER (kwa ajili ya incoming call screen ya mwenzake).
+    String callerName = 'Pacific user';
+    String? callerAvatar;
+    try {
+      final uid = Supabase.instance.client.auth.currentUser!.id;
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('name, profile_image_url')
+          .eq('uid', uid)
+          .maybeSingle();
+      if (row != null) {
+        final n = row['name']?.toString() ?? '';
+        if (n.isNotEmpty) callerName = n;
+        final img = row['profile_image_url']?.toString() ?? '';
+        if (img.isNotEmpty) callerAvatar = img;
+      }
+    } catch (_) {}
+    _callerName = callerName;
+
+    // Tuma ring to channel ya faragha ya mwenzake, kisha jiunge na channel
+    // ya pamoja ya call tukingoja accept/offer/ice/end.
+    final sent = await CallService.instance.sendRing(
+      peerUid: widget.peerUid,
+      callId: widget.callId,
+      callType: widget.callType,
+      callerName: callerName,
+      callerAvatarUrl: callerAvatar,
+    );
+    if (!sent) {
+      if (mounted) setState(() => _phase = CallPhase.ended);
+      _noAnswerTimer = Timer(const Duration(milliseconds: 1400), () {
+        if (mounted) Navigator.of(context).pop();
       });
+      return;
+    }
+
+    await _joinCallChannel();
+
+    // Kama mwenzake hajajibu ndani ya sekunde 45 — call inaisha na
+    // mwenzake anapata "missed call" kwenye notifications zake.
+    _noAnswerTimer = Timer(const Duration(seconds: 45), () {
+      if (mounted && _phase != CallPhase.ongoing) {
+        CallService.logMissedCall(
+          toUid: widget.peerUid,
+          fromUid: Supabase.instance.client.auth.currentUser!.id,
+          fromName: _callerName,
+          isVideo: _isVideo,
+        );
+        _finishCall(sendEnd: true);
+      }
     });
   }
 
-  void _accept() {
-    if (!mounted) return;
-    _phaseTimer?.cancel();
+  // ============================================================
+  // INCOMING CALL — accept / decline
+  // ============================================================
+
+  Future<void> _accept() async {
+    if (_accepted || _phase == CallPhase.ended) return;
+    _accepted = true;
+
+    final ok = await _prepareMediaAndPeer();
+    if (!ok || !mounted) return;
+
+    // Jiunge na channel KABLA ya kutuma accept ili offer isipotee.
+    await _joinCallChannel();
+    _signal('accept');
+
     setState(() => _phase = CallPhase.connecting);
-    _phaseTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (!mounted) return;
-      _goOngoing();
+
+    // Kama offer haifiki ndani ya sekunde 20 — call inaisha.
+    _noAnswerTimer = Timer(const Duration(seconds: 20), () {
+      if (mounted && _phase != CallPhase.ongoing) {
+        _finishCall(sendEnd: true);
+      }
     });
   }
+
+  Future<void> _decline() async {
+    // Jiunge to haraka tu kutuma decline kisha toka.
+    if (_channel == null) await _joinCallChannel();
+    await _signal('decline');
+    // Kumbukumbu to caller: "X did not answer simu yako" — inaonekana kwenye
+    // "Missed Calls" zake na haitafutwi; inaashiriwa imesomwa akishaiona.
+    String myName = 'Pacific user';
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('name')
+          .eq('uid', Supabase.instance.client.auth.currentUser!.id)
+          .maybeSingle();
+      final n = row?['name']?.toString() ?? '';
+      if (n.isNotEmpty) myName = n;
+    } catch (_) {}
+    CallService.logMissedCall(
+      toUid: widget.peerUid,
+      fromUid: Supabase.instance.client.auth.currentUser?.id ?? '',
+      fromName: myName,
+      isVideo: _isVideo,
+      declined: true,
+    );
+    await _finishCall(sendEnd: false);
+  }
+
+  // ============================================================
+  // SIGNALING — channel ya pamoja ya call
+  // ============================================================
+
+  Future<void> _joinCallChannel() async {
+    if (_channel != null) return;
+    final client = Supabase.instance.client;
+    _channel = client
+        .channel('call:${widget.callId}')
+        .onBroadcast(event: 'accept', callback: (_) => _onPeerAccepted())
+        .onBroadcast(event: 'offer', callback: _onOffer)
+        .onBroadcast(event: 'answer', callback: _onAnswer)
+        .onBroadcast(event: 'ice', callback: _onIce)
+        .onBroadcast(event: 'decline', callback: (_) => _onPeerDeclined())
+        .onBroadcast(event: 'end', callback: (_) => _onPeerEnded())
+        .subscribe();
+  }
+
+  Future<void> _signal(String event, [Map<String, dynamic>? payload]) async {
+    final ch = _channel;
+    if (ch == null) return;
+    try {
+      await ch.sendBroadcastMessage(event: event, payload: payload ?? const {});
+    } catch (_) {}
+  }
+
+  // Caller: mwenzake amebonyeza Accept — tuma WebRTC offer.
+  Future<void> _onPeerAccepted() async {
+    final pc = _pc;
+    if (pc == null || _phase == CallPhase.ongoing) return;
+    _noAnswerTimer?.cancel();
+    if (mounted) setState(() => _phase = CallPhase.connecting);
+
+    final offer = await pc.createOffer({'offerToReceiveVideo': _isVideo});
+    await pc.setLocalDescription(offer);
+    final desc = await pc.getLocalDescription();
+    await _signal('offer', {'sdp': desc?.sdp, 'type': desc?.type});
+  }
+
+  // Callee: tunapokea offer — tunaweka remote, tunatengeneza answer.
+  Future<void> _onOffer(dynamic payload) async {
+    final pc = _pc;
+    if (pc == null || payload is! Map) return;
+    final sdp = payload['sdp']?.toString();
+    if (sdp == null || sdp.isEmpty) return;
+
+    await pc.setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
+    final answer = await pc.createAnswer({'offerToReceiveVideo': _isVideo});
+    await pc.setLocalDescription(answer);
+    final desc = await pc.getLocalDescription();
+    await _signal('answer', {'sdp': desc?.sdp, 'type': desc?.type});
+    _noAnswerTimer?.cancel();
+    if (mounted && _phase != CallPhase.ongoing) {
+      setState(() => _phase = CallPhase.connecting);
+    }
+  }
+
+  // Caller: tunapokea answer ya callee.
+  Future<void> _onAnswer(dynamic payload) async {
+    final pc = _pc;
+    if (pc == null || payload is! Map) return;
+    final sdp = payload['sdp']?.toString();
+    if (sdp == null || sdp.isEmpty) return;
+    await pc.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+  }
+
+  Future<void> _onIce(dynamic payload) async {
+    final pc = _pc;
+    if (pc == null || payload is! Map) return;
+    final candidate = payload['candidate']?.toString();
+    if (candidate == null || candidate.isEmpty) return;
+    try {
+      await pc.addCandidate(RTCIceCandidate(
+        candidate,
+        payload['sdpMid']?.toString(),
+        (payload['sdpMLineIndex'] as num?)?.toInt(),
+      ));
+    } catch (_) {}
+  }
+
+  void _onPeerDeclined() => _finishCall(sendEnd: false);
+  void _onPeerEnded() => _finishCall(sendEnd: false);
+
+  // ============================================================
+  // MEDIA + PEER CONNECTION
+  // ============================================================
+
+  Future<bool> _prepareMediaAndPeer() async {
+    try {
+      // 1. Ruhusa za mic/camera
+      final permissions = await [
+        Permission.microphone,
+        if (_isVideo) Permission.camera,
+      ].request();
+      if (permissions.values.any((s) => !s.isGranted)) {
+        if (mounted) setState(() => _phase = CallPhase.ended);
+        _noAnswerTimer = Timer(const Duration(milliseconds: 1800), () {
+          if (mounted) Navigator.of(context).pop();
+        });
+        return false;
+      }
+
+      // 2. Media ya local (mic + camera to video call)
+      _localStream = await navigator.mediaDevices.getUserMedia({
+        'audio': true,
+        'video': _isVideo
+            ? {
+                'facingMode': 'user',
+                'width': {'ideal': 1280},
+                'height': {'ideal': 720},
+              }
+            : false,
+      });
+      _localRenderer.srcObject = _localStream;
+      _localVideoReady = _localStream!.getVideoTracks().isNotEmpty;
+
+      // 3. Peer connection
+      _pc = await createPeerConnection(_peerConfig);
+
+      _pc!.onTrack = (event) {
+        if (event.streams.isNotEmpty) {
+          _remoteStream = event.streams[0];
+          _remoteRenderer.srcObject = _remoteStream;
+          if (mounted) setState(() {});
+        }
+      };
+      _pc!.onIceCandidate = (candidate) {
+        if (candidate.candidate == null) return;
+        _signal('ice', {
+          'candidate': candidate.candidate,
+          'sdpMid': candidate.sdpMid,
+          'sdpMLineIndex': candidate.sdpMLineIndex,
+        });
+      };
+      _pc!.onConnectionState = (state) {
+        if (state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          _goOngoing();
+        } else if (state ==
+            RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+          _finishCall(sendEnd: true);
+        }
+      };
+
+      for (final track in _localStream!.getTracks()) {
+        await _pc!.addTrack(track, _localStream!);
+      }
+      return true;
+    } catch (_) {
+      if (mounted) {
+        setState(() => _phase = CallPhase.ended);
+        _noAnswerTimer = Timer(const Duration(milliseconds: 1800), () {
+          if (mounted) Navigator.of(context).pop();
+        });
+      }
+      return false;
+    }
+  }
+
+  // ============================================================
+  // LIFECYCLE YA CALL
+  // ============================================================
 
   void _goOngoing() {
-    if (!mounted) return;
+    if (!mounted ||
+        _phase == CallPhase.ongoing ||
+        _phase == CallPhase.ended) {
+      return;
+    }
+    _noAnswerTimer?.cancel();
     _pulseController.stop();
     setState(() => _phase = CallPhase.ongoing);
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -129,14 +424,46 @@ class _CallScreenState extends State<CallScreen>
     });
   }
 
-  void _endCall() {
-    _phaseTimer?.cancel();
+  void _endCall() => _finishCall(sendEnd: true);
+
+  Future<void> _finishCall({required bool sendEnd}) async {
+    _noAnswerTimer?.cancel();
     _durationTimer?.cancel();
-    if (!mounted) return;
+    if (sendEnd) await _signal('end');
+    await _teardownWebRTC();
+    if (!mounted || _phase == CallPhase.ended) return;
     setState(() => _phase = CallPhase.ended);
-    _phaseTimer = Timer(const Duration(milliseconds: 1400), () {
+    Timer(const Duration(milliseconds: 1400), () {
       if (mounted) Navigator.of(context).pop();
     });
+  }
+
+  Future<void> _teardownWebRTC() async {
+    if (_tornDown) return;
+    _tornDown = true;
+    try {
+      final ch = _channel;
+      _channel = null;
+      if (ch != null) await ch.unsubscribe();
+    } catch (_) {}
+    try {
+      await _pc?.close();
+    } catch (_) {}
+    _pc = null;
+    try {
+      await _localStream?.dispose();
+    } catch (_) {}
+    try {
+      await _remoteStream?.dispose();
+    } catch (_) {}
+    _localStream = null;
+    _remoteStream = null;
+    try {
+      await _localRenderer.dispose();
+    } catch (_) {}
+    try {
+      await _remoteRenderer.dispose();
+    } catch (_) {}
   }
 
   String get _formattedDuration {
@@ -160,10 +487,11 @@ class _CallScreenState extends State<CallScreen>
 
   @override
   void dispose() {
-    _phaseTimer?.cancel();
+    _noAnswerTimer?.cancel();
     _durationTimer?.cancel();
     _pulseController.dispose();
     _dotsController.dispose();
+    _teardownWebRTC();
     super.dispose();
   }
 
@@ -306,11 +634,18 @@ class _CallScreenState extends State<CallScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Stack(
         children: [
-          // Remote video area (placeholder for the real feed)
+          // Remote video area — real WebRTC feed, placeholder kabla haijaunganisha
           Positioned.fill(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
-              child: Container(
+              child: (_phase == CallPhase.ongoing &&
+                      _remoteRenderer.srcObject != null)
+                  ? RTCVideoView(
+                      _remoteRenderer,
+                      objectFit:
+                          RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                    )
+                  : Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
@@ -391,12 +726,23 @@ class _CallScreenState extends State<CallScreen>
                   ),
                 ],
               ),
-              child: Icon(
-                _isVideoEnabled
-                    ? Icons.person_rounded
-                    : Icons.videocam_off_rounded,
-                color: Colors.white.withValues(alpha: 0.9),
-                size: 34,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16.5),
+                child: (_localVideoReady && _isVideoEnabled &&
+                        _localRenderer.srcObject != null)
+                    ? RTCVideoView(
+                        _localRenderer,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                        mirror: true,
+                      )
+                    : Icon(
+                        _isVideoEnabled
+                            ? Icons.person_rounded
+                            : Icons.videocam_off_rounded,
+                        color: Colors.white.withValues(alpha: 0.9),
+                        size: 34,
+                      ),
               ),
             ),
           ),
@@ -537,7 +883,13 @@ class _CallScreenState extends State<CallScreen>
             icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
             label: _isMuted ? 'Unmute' : 'Mute',
             active: _isMuted,
-            onPressed: () => setState(() => _isMuted = !_isMuted),
+            onPressed: () {
+              setState(() => _isMuted = !_isMuted);
+              // Tuma/zima audio track ya local.
+              _localStream?.getAudioTracks().forEach((track) {
+                track.enabled = !_isMuted;
+              });
+            },
           ),
           _CallButton(
             icon: _isSpeakerOn
@@ -545,7 +897,10 @@ class _CallScreenState extends State<CallScreen>
                 : Icons.volume_down_rounded,
             label: 'Speaker',
             active: _isSpeakerOn,
-            onPressed: () => setState(() => _isSpeakerOn = !_isSpeakerOn),
+            onPressed: () {
+              setState(() => _isSpeakerOn = !_isSpeakerOn);
+              Helper.setSpeakerphoneOn(_isSpeakerOn);
+            },
           ),
           if (_isVideo)
             _CallButton(
@@ -554,8 +909,13 @@ class _CallScreenState extends State<CallScreen>
                   : Icons.videocam_off_rounded,
               label: 'Video',
               active: _isVideoEnabled,
-              onPressed: () =>
-                  setState(() => _isVideoEnabled = !_isVideoEnabled),
+              onPressed: () {
+                setState(() => _isVideoEnabled = !_isVideoEnabled);
+                // Zima/tuma camera ya local.
+                _localStream?.getVideoTracks().forEach((track) {
+                  track.enabled = _isVideoEnabled;
+                });
+              },
             ),
           _CallButton(
             icon: Icons.call_end_rounded,
@@ -579,7 +939,7 @@ class _CallScreenState extends State<CallScreen>
             label: 'Decline',
             backgroundColor: AppColors.callRed,
             large: true,
-            onPressed: _endCall,
+            onPressed: _decline,
           ),
           _CallButton(
             icon: Icons.call_rounded,

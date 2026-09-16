@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'user_prefs.dart';
+
 /// Real notifications:
 ///  - Listens to the Supabase `notifications` table in real-time.
 ///  - Shows a system (local) notification for every new row.
@@ -16,8 +18,24 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  bool _userEnabled = true; // switch ya mtumiaji (users.notifications_enabled)
   StreamSubscription<List<Map<String, dynamic>>>? _subscription;
   final Set<String> _seenIds = {};
+
+  /// Inaitwa na ProfileSettings switch ili mabadiliko ya haraka yaitekeleze
+  /// bila ku-subscribe upya.
+  void setUserEnabled(bool enabled) => _userEnabled = enabled;
+
+  Future<void> _fetchUserPreference(String uid) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('notifications_enabled')
+          .eq('uid', uid)
+          .maybeSingle();
+      _userEnabled = row?['notifications_enabled'] != false;
+    } catch (_) {}
+  }
 
   Future<void> initialize() async {
     if (_initialized) return;
@@ -54,6 +72,8 @@ class NotificationService {
     if (uid == null || !_initialized) return;
 
     // Prevent duplicate subscriptions.
+    if (_subscription != null) return;
+    _fetchUserPreference(uid);
     _subscription ??= client
         .from('notifications')
         .stream(primaryKey: ['id'])
@@ -72,6 +92,8 @@ class NotificationService {
   }
 
   Future<void> _onNotifications(List<Map<String, dynamic>> rows) async {
+    // User amezima arifa kwenye Profile Settings — usionyeshe chochote.
+    if (!_userEnabled) return;
     for (final row in rows) {
       final String id = row['id']?.toString() ?? '';
       if (id.isEmpty || _seenIds.contains(id)) continue;
@@ -95,16 +117,19 @@ class NotificationService {
   }) async {
     if (!_initialized) return;
     try {
-      const androidDetails = AndroidNotificationDetails(
+      final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
         'pacific_general',
         'General Notifications',
         channelDescription: 'Matches, messages, gifts and coins',
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
+        // Mapendeleo ya mtumiaji (Profile > Notifications):
+        playSound: UserPrefs.instance.soundEnabled,
+        enableVibration: UserPrefs.instance.vibrationEnabled,
       );
       const iosDetails = DarwinNotificationDetails();
-      const details = NotificationDetails(
+      final details = NotificationDetails(
         android: androidDetails,
         iOS: iosDetails,
       );

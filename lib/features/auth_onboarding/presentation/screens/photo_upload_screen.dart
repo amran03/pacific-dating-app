@@ -1,9 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_color.dart';
+import '../../../../core/widgets/heart_loader.dart';
 import '../../../dashboard/presentation/screens/main_dashboard_screen.dart';
 
 class PhotoUploadScreen extends StatefulWidget {
-  const PhotoUploadScreen({super.key});
+  final String firstName;
+  final DateTime birthDate;
+  final String gender;
+
+  const PhotoUploadScreen({
+    super.key,
+    required this.firstName,
+    required this.birthDate,
+    required this.gender,
+  });
 
   @override
   State<PhotoUploadScreen> createState() => _PhotoUploadScreenState();
@@ -12,6 +23,66 @@ class PhotoUploadScreen extends StatefulWidget {
 class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
   // Tutatumia list hii kufuatilia picha (kwa sasa ni placeholder)
   final List<String?> _photos = List.generate(6, (_) => null);
+  bool _isSaving = false;
+
+  int _computedAge() {
+    final now = DateTime.now();
+    int age = now.year - widget.birthDate.year;
+    if (now.month < widget.birthDate.month ||
+        (now.month == widget.birthDate.month &&
+            now.day < widget.birthDate.day)) {
+      age--;
+    }
+    return age;
+  }
+
+  /// Huokoa taarifa zote za onboarding kwenye `users` table na
+  /// kuashiria profile imekamilika — hii inamruhusu user kurudi
+  /// moja to moja kwenye dashboard anapofungua app tena (AuthGate).
+  Future<void> _finishSetup() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) throw Exception('Haujaingia (no session)');
+
+      // Picha ya kwanza iliyowekwa (kama ipo) inakuwa profile image.
+      final firstPhoto = _photos.whereType<String>().isNotEmpty
+          ? _photos.whereType<String>().first
+          : null;
+
+      await Supabase.instance.client.from('users').update({
+        'name': widget.firstName,
+        'name_lower': widget.firstName.toLowerCase(),
+        'birth_date': widget.birthDate.toIso8601String().substring(0, 10),
+        'age': _computedAge(),
+        'gender': widget.gender,
+        if (firstPhoto != null) 'profile_image_url': firstPhoto,
+        'is_profile_complete': true,
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('uid', uid);
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const MainDashboardScreen(),
+        ),
+        (route) => false, // Inafuta skrini za nyuma ili asirudi kwenye Onboarding
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
+  }
 
   Widget _buildPhotoSlot(int index) {
     bool hasPhoto = _photos[index] != null;
@@ -119,15 +190,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                 width: double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const MainDashboardScreen(),
-                      ),
-                          (route) => false, // Inafuta skrini za nyuma ili asirudi kwenye Onboarding
-                    );
-                  },
+                  onPressed: _isSaving ? null : _finishSetup,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     elevation: 0,
@@ -135,7 +198,9 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                       borderRadius: BorderRadius.circular(30),
                     ),
                   ),
-                  child: const Text(
+                  child: _isSaving
+                      ? const HeartLoader(size: 26, color: Colors.white)
+                      : const Text(
                     "Finish Setup",
                     style: TextStyle(
                       fontSize: 16,

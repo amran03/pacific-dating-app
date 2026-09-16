@@ -4,8 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/gift_model.dart';
 import 'package:pacific_dating_app/core/services/supabase_service.dart';
+import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 
-/// Modal ya kutuma zawadi - muundo wa TikTok: tray ya kusogeza kwa mlalo,
+/// Modal ya kutuma zawadi - muundo wa TikTok: tray ya kusogeza to mlalo,
 /// coins zako halisi zinaonekana juu, na kutuma zawadi kunapunguza coins
 /// zako papo hapo kupitia Firestore transaction (salama dhidi ya "double
 /// spend" hata ukibonyeza haraka mara mbili).
@@ -48,6 +50,7 @@ class _GiftSheetContent extends StatefulWidget {
 }
 
 class _GiftSheetContentState extends State<_GiftSheetContent> {
+  final MatchmakingService _matchmakingService = MatchmakingService();
   String? _sendingGiftId;
   String? _errorMessage;
   Set<String> _unlockedGifts = {};
@@ -106,13 +109,13 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
   bool _isGiftUnlocked(String giftId) => _unlockedGifts.contains(giftId);
 
   Future<void> _sendGift(GiftModel gift, int currentCoins) async {
-    if (_sendingGiftId != null) return; // Zuia kutuma mbili kwa wakati mmoja
+    if (_sendingGiftId != null) return; // Zuia kutuma mbili to wakati mmoja
 
     // Check if gift is already unlocked - if so, allow without coin check
     final isUnlocked = _isGiftUnlocked(gift.id);
     
     if (!isUnlocked && currentCoins < gift.coinPrice) {
-      setState(() => _errorMessage = "Huna Coins za kutosha kwa ${gift.name}. Nunua Coins zaidi.");
+      setState(() => _errorMessage = "You don't have enough Coins for ${gift.name}. Buy Coins zaidi.");
       return;
     }
 
@@ -121,48 +124,62 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
       _errorMessage = null;
     });
 
-    final client = Supabase.instance.client;
-    final String myUid = client.auth.currentUser!.id;
-
     try {
-      // If gift is already unlocked, skip coin deduction
+      // Kama zawadi tayari imeshafunguliwa (unlocked), itume bila kutoza tena.
+      // Vinginevyo tumia RPC ya atomic (matchmakingService.sendGift):
+      // kwanza RPC, ikikosekana (schema ya zamani) kuna fallback ya zamani.
       if (!isUnlocked) {
-        // NOTE: For true atomicity in Supabase, an RPC (database function) should be used.
-        // Here we perform a check and update in steps.
-        final myUserResponse = await client.from('users').select('coins').eq('uid', myUid).single();
-        final int liveCoins = (myUserResponse['coins'] ?? 0) as int;
-
-        if (liveCoins < gift.coinPrice) {
-          throw Exception('INSUFFICIENT_COINS');
+        String fromName = 'User';
+        try {
+          final meRow = await Supabase.instance.client
+              .from('users')
+              .select('name')
+              .eq('uid', Supabase.instance.client.auth.currentUser!.id)
+              .maybeSingle();
+          if (meRow != null && (meRow['name']?.toString().isNotEmpty ?? false)) {
+            fromName = meRow['name'].toString();
+          }
+        } catch (_) {}
+        await _matchmakingService.sendGift(
+          toUid: widget.recipientUid,
+          giftId: gift.id,
+          giftName: gift.name,
+          giftEmoji: gift.emoji ?? '',
+          giftImageUrl: gift.imageUrl ?? '',
+          coinCost: gift.coinPrice,
+          fromName: fromName,
+        );
+      } else {
+        // Unlocked — rekodi historia + arifa tu (zote hiari, zisizuie).
+        final client = Supabase.instance.client;
+        final String myUid = client.auth.currentUser!.id;
+        try {
+          await client.from('gifts_sent').insert({
+            'from_uid': myUid,
+            'to_uid': widget.recipientUid,
+            'gift_id': gift.id,
+            'gift_name': gift.name,
+            'gift_emoji': gift.emoji ?? '',
+            'gift_image_url': gift.imageUrl ?? '',
+            'coin_cost': 0,
+            'sent_at': DateTime.now().toIso8601String(),
+          });
+        } catch (e) {
+          debugPrint('gifts_sent insert skipped (non-fatal): $e');
         }
-
-        await client.from('users').update({'coins': liveCoins - gift.coinPrice}).eq('uid', myUid);
+        try {
+          await client.from('notifications').insert({
+            'to_uid': widget.recipientUid,
+            'type': 'gift',
+            'title': 'You received a New Gift! 🎁',
+            'description': 'Umetumiwa ${gift.emoji ?? '🎁'} ${gift.name}.',
+            'created_at': DateTime.now().toIso8601String(),
+            'read': false,
+          });
+        } catch (e) {
+          debugPrint('gift notification skipped (non-fatal): $e');
+        }
       }
-
-      // Rekodi zawadi kwa historia katika Supabase
-      await client.from('gifts_sent').insert({
-        'from_uid': myUid,
-        'to_uid': widget.recipientUid,
-        'gift_id': gift.id,
-        'gift_name': gift.name,
-        'gift_emoji': gift.emoji ?? '',
-        'gift_image_url': gift.imageUrl ?? '',
-        'coin_cost': gift.coinPrice,
-        'sent_at': DateTime.now().toIso8601String(),
-      });
-
-      // Arifa kwa recipient - Supabase notifications table
-      final myProfileResponse = await client.from('users').select('name').eq('uid', myUid).single();
-      final String myName = (myProfileResponse['name'] ?? 'Mtumiaji') as String;
-
-      await client.from('notifications').insert({
-        'to_uid': widget.recipientUid,
-        'type': 'gift',
-        'title': 'Umepokea Zawadi Mpya! 🎁',
-        'description': '$myName amekutumia ${gift.emoji ?? '🎁'} ${gift.name}.',
-        'created_at': DateTime.now().toIso8601String(),
-        'read': false,
-      });
 
       // Mark gift as permanently unlocked after successful send
       await _unlockGift(gift.id);
@@ -175,8 +192,8 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
       setState(() {
         _sendingGiftId = null;
         _errorMessage = e.toString().contains('INSUFFICIENT_COINS')
-            ? "Huna Coins za kutosha kwa ${gift.name}."
-            : "Imeshindikana kutuma zawadi. Jaribu tena.";
+            ? "You don't have enough coins for ${gift.name}."
+            : "Failed to send gift. Please try again.";
       });
     }
   }
@@ -198,7 +215,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
           stream: client.from('users').stream(primaryKey: ['uid']).eq('uid', myUid),
           builder: (context, snapshot) {
             final int myCoins = (snapshot.hasData && snapshot.data!.isNotEmpty)
-                ? (snapshot.data!.first['coins'] ?? 0) as int
+                ? ((snapshot.data!.first['coins'] as num?)?.toInt() ?? 0)
                 : 0;
 
             return Padding(
@@ -224,7 +241,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                     children: [
                       Expanded(
                         child: Text(
-                          "Tuma Zawadi kwa ${widget.recipientName} 🎁",
+                          "Tuma Gifts to ${widget.recipientName} 🎁",
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -271,10 +288,10 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                             onPressed: () {
                               // Nafasi ya baadaye kuunganisha In-App Purchases
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Ununuzi wa Coins unakuja hivi karibuni! 🪙")),
+                                const SnackBar(content: Text("Buying Coins is coming soon! 🪙")),
                               );
                             },
-                            child: const Text("Nunua", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                            child: const Text("Buy", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -283,11 +300,11 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
 
                   const SizedBox(height: 18),
 
-                  // TikTok-style: tray ya kusogeza kwa MLALO
+                  // TikTok-style: tray ya kusogeza to MLALO
                   SizedBox(
                     height: 158,
                     child: _isLoadingGifts
-                        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+                        ? const Center(child: HeartLoader(size: 52))
                         : ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -309,7 +326,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                               ? () => _sendGift(gift, myCoins)
                               : () {
                                   setState(() => _errorMessage =
-                                      "Huna Coins za kutosha kwa ${gift.name}.");
+                                      "You don't have enough Coins for ${gift.name}.");
                                 },
                         );
                       },
@@ -391,7 +408,7 @@ class _GiftCardState extends State<_GiftCard>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Tier tag kwa luxury/premium
+        // Tier tag to luxury/premium
         if (!locked && (gift.isLuxury || gift.isPremium))
           Container(
             padding: const EdgeInsets.symmetric(

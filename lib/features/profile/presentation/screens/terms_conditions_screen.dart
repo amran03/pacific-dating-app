@@ -8,123 +8,122 @@ class TermsConditionsScreen extends StatelessWidget {
 
   static const List<LegalSection> _sections = [
     LegalSection(
-      '1. Makubaliano • Acceptance of Terms',
+      '1. Acceptance of Terms',
       icon: Icons.handshake_rounded,
       body:
-          'Kwa kutumia Pacific Dating App unakubali Masharti haya ya '
-          'Huduma (Terms & Conditions) na Sera yetu ya Faragha. Usitumie '
-          'app hii ukiwa hujakubali masharti haya. Masharti haya yana '
-          'nguvu kisheria kama mkataba kati yako na sisi.',
+          'By using Pacific Dating App you agree to these Terms & '
+          'Conditions and our Privacy Policy. Do not use this app unless '
+          'you accept these terms. These terms are legally binding as a '
+          'contract between you and us.',
     ),
     LegalSection(
-      '2. Ustahiki • Eligibility (18+)',
+      '2. Eligibility (18+)',
       icon: Icons.event_available_rounded,
       body:
-          'Lazima uwe na umri wa MIAKA 18 AU ZAIDI kutumia app hii. Kwa '
-          'kufungua akaunti unathibitisha kuwa umri wako ni wa kweli na '
-          'unaniruhusu kuingia mkataba. Akaunti moja kwa mtu mmoja tu — '
-          'hairuhusiwi kufungua akaunti za bandia au kuigiza kuwa wewe ni '
-          'mtu mwingine.',
+          'You must be 18 YEARS OR OLDER to use this app. By creating an '
+          'account you confirm that your age is real and that you are '
+          'allowed to enter into a contract. One account per person only — '
+          'fake accounts or impersonating someone else is not allowed.',
     ),
     LegalSection(
-      '3. Taarifa za Akaunti • Your Account',
+      '3. Your Account',
       icon: Icons.account_circle_rounded,
       body:
-          'Ni wajibu wao kulinda password yako na usalama wa simu yako. '
-          'Taarifa za profile zako (jina, umri, picha) lazima ziwe za '
-          'KWELI. Kuweka taarifa za uongo ni kukiolera masharti haya na '
-          'kunaweza pelekea akaunti yako kufutwa.',
+          'You are responsible for protecting your password and the '
+          'security of your phone. Your profile details (name, age, '
+          'photos) must be TRUE. Providing false information is a breach '
+          'of these terms and may lead to your account being deleted.',
     ),
     LegalSection(
-      '4. Maadili • Community Conduct',
+      '4. Community Conduct',
       icon: Icons.diversity_3_rounded,
       body:
-          'Ili Pacific iwe salama kwa wote, hairuhusiwi: kukosea wengine '
-          'heshima, unyanyasaji (harassment), maneno ya chuki, picha '
-          'za uchi au za ngono, udanganyifu/scams, spam, kuomba pesa, '
-          'kuwinda watu (stalking), au vitendo vyovyote vya kinyume na '
-          'sheria. Unaweza kuripoti na kuzuia mtumiaji yeyote kutoka '
-          'profile au chat yake, na tunaweza kufuta akaunti inayokiuka.',
+          'To keep Pacific safe for everyone, the following are not '
+          'allowed: disrespecting others, harassment, hate speech, nude '
+          'or sexual images, fraud/scams, spam, asking for money, '
+          'stalking, or any unlawful behavior. You can report and block '
+          'any user from their profile or chat, and we may delete '
+          'accounts that break the rules.',
     ),
     LegalSection(
-      '5. Maudhui Yako • Your Content',
+      '5. Your Content',
       icon: Icons.photo_camera_rounded,
       body:
-          'Unamiliki maudhui unayopakia (picha, bio, voice notes). Kwa '
-          'kuyapakia, unatupa lesi ndogo ya kuyahifadhi na kuyapeleka '
-          'kwa watumiaji wanaokushirikiana nayo ndani ya app tu — hatuuzi '
-          'maudhui yako wala hatuyatumii nje ya app. Usipakie maudhui '
-          'ya watu wengine bila ruhusa yao. Tunaweza kuondoa maudhui '
-          'yakiwa yamekiuka masharti haya.',
+          'You own the content you upload (photos, bio, voice notes). By '
+          'uploading, you grant us a limited license to store and deliver '
+          'it to users you interact with inside the app only — we do not '
+          'sell or use your content outside the app. Do not upload other '
+          'people\'s content without their permission. We may remove '
+          'content that breaches these terms.',
     ),
     LegalSection(
-      '6. Coins, Gifts na VIP • Virtual Items & Purchases',
+      '6. Coins, Gifts & VIP • Virtual Items & Purchases',
       icon: Icons.diamond_rounded,
       body:
-          'Coins, gifts na VIP badges ni vitu pepe (virtual) vya app hii '
-          'tu — havina thamani ya pesa halisi na haziwezi kubadilishwa '
-          'kuwa pesa au kutolewa nje ya app. Vipengele hivi hazirudishwi '
-          '(non-refundable) isipokuwa pale sheria inavyolazimu. Malipo '
-          'yanashughulikiwa na Google Play / App Store; maswali ya '
-          'malipo yafuate sheria zao. Bei zinaweza kubadilishwa kwa '
-          'taarifa.',
+          'Coins, gifts and VIP badges are virtual items of this app only '
+          '— they have no real-money value and cannot be exchanged for '
+          'cash or withdrawn from the app. These purchases are '
+          'non-refundable except where required by law. Payments are '
+          'handled by Google Play / App Store; billing questions follow '
+          'their policies. Prices may change at any time.',
     ),
     LegalSection(
-      '7. Simu na Video Calls • Voice & Video Calls',
+      '7. Voice & Video Calls',
       icon: Icons.videocam_rounded,
       body:
-          'Simu za sauti na video ndani ya app hufanya kazi kupitia '
-          'internet (data) — gharama za data ni za mtoa huduma wako wa '
-          'mtandao. Calls hazitumiwi kwa dharura; kwa dharura tumia '
-          'namba za dharura za nchi yako. Kurekodi call bila idhini ya '
-          'mwenzako kunaweza kuwa kukiolera sheria na masharti haya.',
+          'Voice and video calls inside the app work over the internet '
+          '(data) — data charges are from your mobile network provider. '
+          'Calls must not be used for emergencies; in an emergency use '
+          'your country\'s emergency numbers. Recording a call without '
+          'the other person\'s consent may be unlawful and breaches '
+          'these terms.',
     ),
     LegalSection(
-      '8. Usalama wa Miadi • Safety',
+      '8. Safety',
       icon: Icons.health_and_safety_rounded,
       body:
-          'Hatuthibitishi kikamilifu utambulisho wa kila mtumiaji. Tuweke '
-          'tahadhari: kutana na mtu mpya mahali pa hadhara, mjulishe '
-          'rafiki au ndugu, na usitumie taarifa za kifedha na watu '
-          'uliowaonja mtandaoni. Ripoti tabia yoyote ya kupendeza '
-          'kupitia vitufe vya report/block.',
+          'We do not fully verify every user\'s identity. Please be '
+          'careful: meet new people in public places, tell a friend or '
+          'relative, and never share financial details with people you '
+          'have only met online. Report any inappropriate behavior via '
+          'the report/block buttons.',
     ),
     LegalSection(
-      '9. Upatikanaji na Kusimamisha Huduma • Availability & Termination',
+      '9. Availability & Termination',
       icon: Icons.power_settings_new_rounded,
       body:
-          'Tunajitahidi app ifanye kazi bila kukoma, lakini hatuahidi '
-          'kuwa itapatikana bila makosa au kusimama. Tunaweza kusimamisha '
-          'au kufuta akaunti inayokiuka masharti haya. Wewe pia unaweza '
-          'kuacha kutumia app wakati wowote — ukitaka data yako ifutwe '
-          'kabisa, fuata taratibu za Sera ya Faragha.',
+          'We strive to keep the app running without interruption, but we '
+          'do not guarantee it will always be available without errors or '
+          'downtime. We may suspend or delete accounts that breach these '
+          'terms. You may also stop using the app at any time — if you '
+          'want your data fully deleted, follow the steps in the Privacy '
+          'Policy.',
     ),
     LegalSection(
-      '10. Dhana za Kisheria • Disclaimers',
+      '10. Disclaimers',
       icon: Icons.gavel_rounded,
       body:
-          'App inatolewa "KAMA ILIVYO" (AS IS). Hatutoi dhamana ya '
-          'matokeo ya mahusiano au matches, na hatubebeki kwa hatia kwa '
-          'matumizi yasiyofaa ya app, maudhui ya watumiaji wengine, au '
-          'matukio yaliyotokea nje ya app. Kwa kiwango kinachoruhusiwa '
-          'na sheria, uwajibikaji wetu kwa ujumle umepunguzwa hadi '
-          'kiwango ulicholipa kwa kutumia app (ambacho kwa kawaida ni '
-          'bure).',
+          'The app is provided "AS IS". We make no promises about the '
+          'outcome of relationships or matches, and we are not liable for '
+          'misuse of the app, other users\' content, or events that happen '
+          'outside the app. To the maximum extent permitted by law, our '
+          'total liability is limited to the amount you paid to use the '
+          'app (which is normally free).',
     ),
     LegalSection(
-      '11. Mabadiliko ya Masharti • Changes to These Terms',
+      '11. Changes to These Terms',
       icon: Icons.update_rounded,
       body:
-          'Tunaweza kusasisha masharti haya kwa muda mwingine. '
-          'Mabadiliko yatachapishwa ndani ya app; ukiendelea kutumia app '
-          'baada ya mabadiliko, inamaanisha umekubali toleo jipya.',
+          'We may update these terms from time to time. Changes will be '
+          'published inside the app; if you keep using the app after '
+          'changes take effect, that means you accept the new version.',
     ),
     LegalSection(
-      '12. Mawasiliano • Contact',
+      '12. Contact',
       icon: Icons.support_agent_rounded,
       body:
-          'Maswali kuhusu masharti haya yatumwe kwa timu ya huduma kwa '
-          'wateja kupitia msaada wa ndani ya app (Support).',
+          'Questions about these terms should be sent to our customer '
+          'support team via the in-app support (Support).',
     ),
   ];
 
@@ -132,11 +131,11 @@ class TermsConditionsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return LegalPageScaffold(
       title: 'Terms & Conditions',
-      swahiliTitle: 'Masharti ya Huduma',
+      headerTitle: 'Terms & Conditions',
       subtitle:
-          'Karibu Pacific! Masharti haya yanaeleza kanuni za kutumia app '
-          'kwa usalama wa wote — tafadhali yasome kwa makini.',
-      lastUpdated: 'Imesasishwa • Last updated: June 2026',
+          'Welcome to Pacific! These terms explain the rules for using the '
+          'app safely for everyone — please read them carefully.',
+      lastUpdated: 'Last updated: June 2026',
       headerIcon: Icons.description_rounded,
       sections: _sections,
     );

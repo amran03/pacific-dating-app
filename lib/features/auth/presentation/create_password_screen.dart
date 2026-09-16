@@ -2,17 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/auth_errors.dart';
+import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/name_screen.dart';
 
 /// Hubadilisha namba ya simu kuwa "email ya kubuni" (synthetic email).
+/// Inashughulikia formats zote za kawaida za TZ: 0712345678, 712345678,
+/// +255712345678, +255 (0) 712-345-678 n.k.
 String phoneToSyntheticEmail(String phoneNumberOrDigits) {
   String digits = phoneNumberOrDigits.replaceAll(RegExp(r'[^0-9]'), '');
 
+  // Ondoa country code kama ipo, kisha ondoka 0 ya mwanzo (local format),
+  // hatimaye weka 255 upande.
+  if (digits.startsWith('255')) {
+    digits = digits.substring(3);
+  }
   if (digits.startsWith('0')) {
     digits = digits.substring(1);
   }
-  if (!digits.startsWith('255')) {
-    digits = '255$digits';
-  }
+  digits = '255$digits';
 
   return "$digits@pacificdatingapp.com";
 }
@@ -53,6 +59,30 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
       final user = response.user;
       if (user == null) throw Exception("User creation failed");
 
+      // Email confirmation ikiwa IMEWASHWA Supabase, signUp inarudisha
+      // user bila session. Tunatofautisha: (a) akaunti tayari ipo —
+      // identities ni tupu (Supabase inaficha taarifa zake); (b) akaunti
+      // mpya inahitaji kuthibitishwa to email — tunamwongoza admin.
+      if (response.session == null) {
+        if (!mounted) return;
+        final bool alreadyRegistered =
+            user.identities == null || user.identities!.isEmpty;
+        if (alreadyRegistered) {
+          _showMessage(
+            "This account already exists —, please log in with Log In.",
+            Colors.orange,
+          );
+        } else {
+          _showMessage(
+            "Account created but it needs verification. Turn off 'Confirm "
+            "email' kwenye: Supabase > Authentication > Sign In / Up.",
+            Colors.orange,
+          );
+        }
+        Navigator.pop(context);
+        return;
+      }
+
       final String uid = user.id;
 
       // 2. Hifadhi taarifa za awali kwenye Supabase 'users' table
@@ -62,17 +92,23 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
         'auth_email': syntheticEmail,
         'coins': 100,
         'is_profile_complete': false,
+        'notifications_enabled': true,
         'updated_at': DateTime.now().toIso8601String(),
       });
 
       if (!mounted) return;
 
-      _showMessage("Password imewekwa kikamilifu! 🎉", Colors.green);
-      Navigator.pop(context, true);
+      // 3. Anza onboarding (Name -> Birthday -> Gender -> Photos) na
+      //    futa stack ya nyuma ili user asirudi kwenye screens za auth.
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const NameScreen()),
+        (route) => false,
+      );
     } on AuthException catch (e) {
       _showMessage(friendlyAuthError(e), Colors.redAccent);
     } catch (e) {
-      _showMessage("Kosa: ${e.toString()}", Colors.redAccent);
+      _showMessage("Error: ${e.toString()}", Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -147,21 +183,21 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                       icon: Icon(_isPasswordHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined),
                       onPressed: () => setState(() => _isPasswordHidden = !_isPasswordHidden),
                     ),
-                    hintText: "Angalau herufi/tarakimu 6",
+                    hintText: "At least 6 characters",
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
                   validator: (value) {
                     if (value == null || value.length < 6) {
-                      return "Password lazima iwe angalau herufi 6";
+                      return "Password must be at least 6 characters";
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 20),
 
-                const Text("Thibitisha Password", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                const Text("Confirm Password", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: _confirmController,
@@ -172,14 +208,14 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                       icon: Icon(_isConfirmHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined),
                       onPressed: () => setState(() => _isConfirmHidden = !_isConfirmHidden),
                     ),
-                    hintText: "Rudia password",
+                    hintText: "Repeat password",
                     filled: true,
                     fillColor: Colors.white,
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                   ),
                   validator: (value) {
                     if (value != _passwordController.text) {
-                      return "Password hazifanani";
+                      return "Passwords do not match";
                     }
                     return null;
                   },
@@ -199,7 +235,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : const Text(
-                      "Kamilisha & Endelea",
+                      "Complete & Continue",
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ),

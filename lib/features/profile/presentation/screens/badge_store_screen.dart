@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pacific_dating_app/core/services/vip_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 
 class BadgeStoreScreen extends StatefulWidget {
   const BadgeStoreScreen({super.key});
@@ -39,7 +40,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
         CoreErrorService().showError(
           context,
-          "Tafadhali ingia kwenye akaunti yako kwanza.",
+          "Please log in to your account first.",
         );
         return;
       }
@@ -73,7 +74,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
       CoreErrorService().showError(
         context,
-        "Imeshindikana kupakia taarifa za VIP.",
+        "Failed to load VIP info.",
       );
     } finally {
       if (mounted) {
@@ -153,7 +154,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      String message = "Imeshindikana kununua badge.";
+      String message = "Failed to buy badge.";
 
       final error = e.toString();
 
@@ -247,9 +248,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
       body: _isLoading
           ? const Center(
-        child: CircularProgressIndicator(
-          color: Colors.amber,
-        ),
+        child: HeartLoader(size: 62),
       )
           : SingleChildScrollView(
         padding: const EdgeInsets.all(24),

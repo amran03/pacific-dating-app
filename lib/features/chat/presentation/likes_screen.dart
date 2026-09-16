@@ -3,6 +3,7 @@ import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 
 class LikesScreen extends StatefulWidget {
   const LikesScreen({super.key});
@@ -35,19 +36,19 @@ class _LikesScreenState extends State<LikesScreen> {
         stream: _matchmakingService.streamUsersWhoLikedMe(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+            return const Center(child: HeartLoader(size: 62));
           }
 
           if (snapshot.hasError) {
             // Kama unaona error hapa mara ya kwanza, mara nyingi ni kwa
             // sababu Firestore Composite Index bado haijajengwa. Angalia
-            // 'debug console' - Firebase hutoa LINK ya moja kwa moja ya
+            // 'debug console' - Firebase hutoa LINK ya moja to moja ya
             // kujenga index hiyo, bonyeza tu link hiyo.
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: Text(
-                  "Imeshindikana kupakua Likes: ${snapshot.error}",
+                  "Failed to load Likes: ${snapshot.error}",
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.redAccent),
                 ),
@@ -70,7 +71,7 @@ class _LikesScreenState extends State<LikesScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    "Endelea kutafuta kwenye Discover - watu wanaokupenda\nwataonekana hapa moja kwa moja.",
+                    "Continue kutafuta kwenye Discover - watu wanaokupenda\nwataonekana hapa moja to moja.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w300),
                   ),
@@ -85,7 +86,7 @@ class _LikesScreenState extends State<LikesScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "${likedByUsers.length} Watu wamekupenda",
+                  "${likedByUsers.length} Watu liked you",
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),

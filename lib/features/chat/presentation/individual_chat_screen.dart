@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
@@ -15,6 +15,9 @@ import 'package:pacific_dating_app/features/profile/presentation/public_profile_
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/chat/presentation/widgets/gift_modal_bottom_sheet.dart';
 import 'package:pacific_dating_app/core/services/presence_service.dart';
+import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
+import 'package:pacific_dating_app/core/services/user_prefs.dart';
+import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/localization/app_language.dart';
 
@@ -59,6 +62,14 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // Chat lock state — track whether chat is unlocked for this session.
   StreamSubscription<void>? _playerCompleteSubscription;
 
+  // ---- CHAT LOCK (coin gate) ----
+  // Chat inaonekana imefungwa kama mwenzake ameweka bei > 0 NA bado
+  // hujalipа. Ukilipa, unlocked_by inahifadhiwa DB -> haifungwi TENA
+  // (milele), na overlay inatoweka kabisa.
+  bool _chatLocked = false;
+  int _unlockPrice = 0;
+  bool _unlocking = false;
+
   // ---- Typing indicator (Supabase-backed, throttled writes) ----
   Timer? _typingClearTimer;
   DateTime? _lastTypingWrite;
@@ -101,7 +112,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         _audioPlayer.onPlayerComplete.listen((_) {});
   }
 
-  /// Checks if the chat is locked and sets _chatUnlocked accordingly
+  /// Checks if the chat is locked and sets _chatLocked accordingly.
+  ///
+  /// Lock logic:
+  ///  - Mwenzake akiwa na `chat_unlock_price > 0` NA hujalipa -> imefungwa.
+  ///  - Ukiwa tayari kwenye `chat_rooms.unlocked_by` -> haifungwi TENA.
+  ///  - Bei 0 -> bure, hairuhusu kulock.
   Future<void> _checkChatLockStatus() async {
     final user = currentUser;
     if (user == null || _chatId == null) return;
@@ -113,35 +129,172 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           .eq('id', _chatId!)
           .maybeSingle();
 
-      bool isUnlocked = false;
-      if (chatRoom != null) {
-        final unlockedBy = chatRoom['unlocked_by'] as List<dynamic>?;
-        isUnlocked = unlockedBy?.contains(user.id) ?? false;
-      }
+      final List<dynamic> unlockedBy =
+          (chatRoom?['unlocked_by'] as List<dynamic>?) ?? const [];
 
-      // If already unlocked, no need to check further
-      if (isUnlocked) {
+      // Ukiwa umelipa mara moja — chat inabaki wazi MILELE.
+      if (unlockedBy.contains(user.id)) {
+        if (mounted) setState(() => _chatLocked = false);
         return;
       }
 
-      // Check the unlock price from the other user's profile
       final otherUser = await Supabase.instance.client
           .from('users')
-          .select()
+          .select('chat_unlock_price')
           .eq('uid', widget.chat.id)
-          .single();
-      
-      final price = (otherUser['chat_unlock_price'] ?? 0) as int;
-      
-      // Chat is free (price 0) or already unlocked
-      if (price <= 0) {
-        // Chat is free
+          .maybeSingle();
+
+      final int price = (otherUser?['chat_unlock_price'] ?? 0) as int;
+
+      if (mounted) {
+        setState(() {
+          _unlockPrice = price;
+          _chatLocked = price > 0;
+        });
       }
-      // Otherwise, chat remains locked
     } catch (e) {
       debugPrint('Error checking chat lock status: $e');
     }
   }
+
+  /// User ananunua kufungua chat to coins. Baada ya malipo,
+  /// overlay inatoweka MILELE (DB ina `unlocked_by`) — hakuna lock tena.
+  Future<void> _payAndUnlockChat() async {
+    if (_unlocking) return;
+    setState(() => _unlocking = true);
+
+    try {
+      await MatchmakingService().payAndUnlockChat(widget.chat.id);
+      if (!mounted) return;
+      setState(() {
+        _unlocking = false;
+        _chatLocked = false;
+      });
+      _showMessage(
+        'Chat unlocked! You can start chatting now 🎉',
+        backgroundColor: AppColors.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _unlocking = false);
+      final String msg = e.toString().contains('INSUFFICIENT_COINS')
+          ? 'You do not have enough Pacific Coins. Please buy some first.'
+          : 'Failed to unlock chat. Please try again.';
+      _showMessage(msg, backgroundColor: AppColors.error);
+    }
+  }
+  /// Overlay ya lock — inaonekana juu ya chat kama bado haijalipwa.
+  /// Ina kitufe cha kulipia to coins; ikilipwa inatoweka kabisa.
+  Widget _buildChatLockOverlay(bool isLuxury, Color accentColor) {
+    final Color fg = isLuxury ? Colors.white : Colors.black87;
+    final Color subFg = isLuxury ? Colors.white70 : Colors.black54;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.coinGold.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.coinGold.withValues(alpha: 0.25),
+                    blurRadius: 24,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.lock_rounded,
+                color: AppColors.coinGold,
+                size: 46,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Chat Imefungwa',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: fg,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '${widget.chat.name} ameweka bei ya kufungua mazungumzo haya. '
+              'Lipa MARA MOJA tu — chat inabaki wazi milele!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, height: 1.4, color: subFg),
+            ),
+            const SizedBox(height: 22),
+            if (_unlocking)
+              const HeartLoader(size: 46)
+            else ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.coinGold.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.monetization_on_rounded,
+                      color: AppColors.coinGold,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$_unlockPrice Coins',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.coinGoldDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _payAndUnlockChat,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  child: Text(
+                    'Unlock to $_unlockPrice Coins',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+
 
   void _onMessageChanged() {
     if (!mounted) return;
@@ -163,6 +316,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     final chatId = _chatId;
     if (chatId == null || uid == null) return;
 
+    // User amezima "Typing Indicator" — tusimwonyeshe mwenzake.
+    if (!UserPrefs.instance.typingIndicatorEnabled) return;
+
     if (_messageController.text.trim().isEmpty) {
       _lastTypingWrite = null;
       _typingClearTimer?.cancel();
@@ -174,10 +330,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     if (_lastTypingWrite == null ||
         now.difference(_lastTypingWrite!) >= const Duration(seconds: 2)) {
       _lastTypingWrite = now;
+      // Schema ya chat_rooms ina column moja ya 'typing' (uuid) — tunaandika
+      // uid yetu; mwenzake anaiona kupitia realtime stream na kujua sisi
+      // tunaandika. (Column ya 'typing_<uid>' haipo kwenye schema.)
       Supabase.instance.client
           .from('chat_rooms')
           .update({
-            'typing_$uid': DateTime.now().toIso8601String(),
+            'typing': uid,
           })
           .eq('id', chatId)
           .catchError((_) {});
@@ -197,7 +356,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     Supabase.instance.client
         .from('chat_rooms')
         .update({
-          'typing_$uid': null,
+          'typing': null,
         })
         .eq('id', chatId)
         .catchError((_) {});
@@ -286,12 +445,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     final user = currentUser;
     if (user == null || _chatId == null) return;
 
+    // User amezima "Read Receipts" — tusimwonyeshe mwenzake kuwa
+    // ujumbe wake umesomwa (privacy yake inaheshimiwa).
+    if (!UserPrefs.instance.readReceiptsEnabled) return;
+
     try {
       await Supabase.instance.client
           .from('messages')
           .update({
             'seen': true,
-            'seen_at': DateTime.now().toIso8601String(),
           })
           .eq('chat_id', _chatId!)
           .eq('receiver_id', user.id)
@@ -333,7 +495,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
       if (!status.isGranted) {
         _showMessage(
-          "Tafadhali ruhusu microphone kurekodi sauti.",
+          "Please allow microphone access to record audio.",
         );
         return;
       }
@@ -380,7 +542,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       });
 
       _showMessage(
-        "Imeshindikana kuanzisha kurekodi sauti.",
+        "Failed to start voice recording.",
       );
     }
   }
@@ -416,7 +578,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       if (!mounted) return;
 
       _showMessage(
-        "Imeshindikana kuchagua picha.",
+        "Failed to pick photo.",
       );
     }
   }
@@ -435,7 +597,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     if (user == null || chatId == null) {
       _showMessage(
-        "Akaunti yako haijapatikana. Tafadhali ingia tena.",
+        "Your account was not found. Please log in again.",
       );
       return;
     }
@@ -487,7 +649,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         _isUploadingMedia.value = false;
 
         _showMessage(
-          "Imeshindikana kupakia faili.",
+          "Failed to upload file.",
         );
 
         return;
@@ -508,7 +670,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         'sender_id': user.id,
         'receiver_id': widget.chat.id,
         'type': type,
-        'text': messageText,
+        'content': messageText,
         'media_url': finalMediaUrl,
         'created_at': DateTime.now().toIso8601String(),
         'seen': false,
@@ -550,7 +712,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       if (!mounted) return;
 
       _showMessage(
-        "Imeshindikana kutuma ujumbe. Jaribu tena.",
+        "Failed to send message. Please try again.",
       );
     } finally {
       if (mounted) {
@@ -860,7 +1022,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         ),
         body: const Center(
           child: Text(
-            "Mtumiaji hajapatikana.\nTafadhali ingia tena.",
+            "User not found.\nPlease log in again.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 16,
@@ -1003,59 +1165,67 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                     ),
                                   ),
 
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration:
-                                        BoxDecoration(
-                                          color:
-                                          AppColors
-                                              .success,
-                                          shape:
-                                          BoxShape.circle,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: AppColors
-                                                  .success
-                                                  .withValues(alpha: 0.5),
-                                              blurRadius:
-                                              6,
-                                              spreadRadius:
-                                              1.5,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(
-                                        width: 5,
-                                      ),
-                                      // REAL-TIME ONLINE STATUS (mfano
-                                      // WhatsApp): inaonekana "Online" ikiwa
-                                      // peer ifanye presence; bila isogwa,
-                                      // inaonekana lastSeen.
-                                      StreamBuilder<
-                                          Map<String, dynamic>?>(
-                                        stream: PresenceService
-                                            .streamPeerPresence(
-                                          widget.chat.id,
-                                        ),
-                                        builder: (context,
-                                            presenceData) {
-                                          final online =
-                                              PresenceService
-                                                  .isOnline(
-                                                presenceData
-                                                    .data,
-                                              );
-                                          final lastSeenStr = presenceData.data?['last_seen'];
-                                          final lastSeen = lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null;
+                                  // REAL-TIME ONLINE STATUS (mfano
+                                  // WhatsApp): inaonekana "Online" ikiwa
+                                  // peer ifanye presence; bila isogwa,
+                                  // inaonekana lastSeen.
+                                  StreamBuilder<
+                                      Map<String, dynamic>?>(
+                                    stream: PresenceService
+                                        .streamPeerPresence(
+                                      widget.chat.id,
+                                    ),
+                                    builder: (context,
+                                        presenceData) {
+                                      // Mwenzake akiwa amezima "Onyesha
+                                      // Online Status", tunaonyesha neutral
+                                      // dot + "offline" bila kufichua
+                                      // last_seen yake (privacy).
+                                      final peerHidesStatus =
+                                          presenceData.data?[
+                                              'show_online_status_enabled'] ==
+                                          false;
+                                      final online = !peerHidesStatus &&
+                                          PresenceService.isOnline(
+                                            presenceData.data,
+                                          );
+                                      final dotColor = online
+                                          ? AppColors.success
+                                          : Colors.grey;
+                                      final lastSeenStr = peerHidesStatus
+                                          ? null
+                                          : presenceData.data?['last_seen'];
+                                      final lastSeen = lastSeenStr != null
+                                          ? DateTime.tryParse(lastSeenStr)
+                                          : null;
 
-                                          return Text(
+                                      return Row(
+                                        children: [
+                                          Container(
+                                            width: 7,
+                                            height: 7,
+                                            decoration: BoxDecoration(
+                                              color: dotColor,
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: dotColor.withValues(
+                                                    alpha: 0.5,
+                                                  ),
+                                                  blurRadius: 6,
+                                                  spreadRadius: 1.5,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(
+                                            width: 5,
+                                          ),
+
+                                          Text(
                                             online
                                                 ? (_lang.isSwahili
-                                                ? 'Mofunga'
+                                                ? 'Online'
                                                 : 'Online')
                                                 : (lastSeen != null
                                                 ? PresenceService
@@ -1075,10 +1245,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                                   : Colors.black38),
                                               fontSize: 11,
                                             ),
-                                          );
+                                          ),
+                                        ],
+                                        );
                                         },
-                                      ),
-                                    ],
                                   ),
                                 ],
                               ),
@@ -1134,6 +1304,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                     .avatarUrl,
                                 isOutgoing:
                                 true,
+                                peerUid:
+                                widget
+                                    .chat
+                                    .id,
+                                callId:
+                                'call_${DateTime.now().millisecondsSinceEpoch}',
                               );
                             },
                           ),
@@ -1185,6 +1361,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                     .avatarUrl,
                                 isOutgoing:
                                 true,
+                                peerUid:
+                                widget
+                                    .chat
+                                    .id,
+                                callId:
+                                'call_${DateTime.now().millisecondsSinceEpoch}',
                               );
                             },
                           ),
@@ -1237,7 +1419,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                   _showMessage(
                                     _lang.t(
                                       'You sent ${selectedGift.emoji ?? '🎁'} ${selectedGift.name} to ${widget.chat.name}!',
-                                      sw: 'Umemtumia ${selectedGift.emoji ?? '🎁'} ${selectedGift.name} kwa ${widget.chat.name}!',
+                                      sw: 'You sent to ${selectedGift.emoji ?? '🎁'} ${selectedGift.name} to ${widget.chat.name}!',
                                     ),
                                     backgroundColor:
                                     Colors.green,
@@ -1308,14 +1490,14 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                     .waiting) {
                               return const Center(
                                 child:
-                                CircularProgressIndicator(),
+                                HeartLoader(size: 60),
                               );
                             }
 
                             if (snapshot.hasError) {
                               return Center(
                                 child: Text(
-                                  "Imeshindikana kupakia ujumbe.",
+                                  "Failed to load messages.",
                                   style: TextStyle(
                                     color: isLuxury
                                         ? Colors.white70
@@ -1415,14 +1597,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
                           if (typingSnapshot.hasData && typingSnapshot.data!.isNotEmpty) {
                             final data = typingSnapshot.data!.first;
-                            final tsStr = data['typing_${widget.chat.id}'];
-
-                            if (tsStr != null) {
-                              final ts = DateTime.tryParse(tsStr);
-                              if (ts != null) {
-                                peerTyping = DateTime.now().difference(ts).inSeconds < 6;
-                              }
-                            }
+                            // Column 'typing' ina uid wa mwenye kuandika to sasa.
+                            peerTyping = data['typing'] == widget.chat.id;
                           }
 
                           return AnimatedSwitcher(
@@ -1544,14 +1720,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                         12,
                                       ),
                                       child: SizedBox(
-                                        width: 22,
-                                        height: 22,
-                                        child:
-                                        CircularProgressIndicator(
-                                          strokeWidth:
-                                          2.5,
-                                          color: AppColors
-                                              .primary,
+                                        width: 26,
+                                        height: 26,
+                                        child: HeartLoader(
+                                          size: 22,
+                                          color: AppColors.primary,
                                         ),
                                       ),
                                     )
@@ -1824,6 +1997,26 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                       ),
                     ],
                   ),
+
+                  // ==================================================
+                  // CHAT LOCK OVERLAY (coin gate) — IKO MWISHO to Stack
+                  // ili iwe JUU ya kila kitu (pia juu ya input bar) ili
+                  // mtumiaji ashindwe kuandika bila kulipa. Ukilipa, DB
+                  // inahifadhi `unlocked_by` -> overlay inatoweka MILELE.
+                  // ==================================================
+                  if (_chatLocked)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: Container(
+                            color: (isLuxury ? Colors.black : Colors.white)
+                                .withValues(alpha: 0.78),
+                            child: _buildChatLockOverlay(isLuxury, accentColor),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -1856,7 +2049,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
         msg['type']?.toString() ?? 'text';
 
     final String text =
-        msg['text']?.toString() ?? '';
+        msg['content']?.toString() ?? '';
 
     final String mediaUrl =
         msg['media_url']?.toString() ?? '';
@@ -2104,7 +2297,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _lang.t('Gift Sent!', sw: 'Zawadi Imetumwa!'),
+                  _lang.t('Gift Sent!', sw: 'Gift Sent!'),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
@@ -2184,9 +2377,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                 BorderRadius.circular(16),
               ),
               child:
-              const CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
+              const HeartLoader(size: 42),
             );
           },
         ),

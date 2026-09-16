@@ -1,30 +1,41 @@
-// This is a basic Flutter widget test.
+// Smoke tests za Pacific Dating App.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Hatupump app nzima kwenye test (inahitaji Supabase + network), tunatest
+// logic safi ya auth: kubadilisha namba ya simu kuwa synthetic email
+// inayotumika kusajili/kuingia user kwenye Supabase Auth.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:pacific_dating_app/main.dart';
+import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('phoneToSyntheticEmail', () {
+    test('hubadilisha 0712345678 kuwa synthetic email sahihi', () {
+      expect(
+        phoneToSyntheticEmail('0712345678'),
+        '255712345678@pacificdatingapp.com',
+      );
+    });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('hubadilisha 712345678 (bila 0 mwanzoni) sahihi', () {
+      expect(
+        phoneToSyntheticEmail('712345678'),
+        '255712345678@pacificdatingapp.com',
+      );
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('hubadilisha +255712345678 (E.164) sahihi', () {
+      expect(
+        phoneToSyntheticEmail('+255712345678'),
+        '255712345678@pacificdatingapp.com',
+      );
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('hubadilisha +255 071 234 5678 (na nafasi/mabano) sahihi', () {
+      expect(
+        phoneToSyntheticEmail('+255 (0) 712-345-678'),
+        '255712345678@pacificdatingapp.com',
+      );
+    });
   });
 }

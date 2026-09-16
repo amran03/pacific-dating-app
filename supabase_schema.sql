@@ -33,12 +33,71 @@ create table if not exists public.users (
   chat_unlock_price int not null default 0,
   location_enabled boolean not null default false,
   notifications_enabled boolean not null default true,
+  -- Mapendeleo ya faragha (Profile > Settings) — yanaathiri tabia halisi:
+  -- read_receipts  -> seen ticks zinatumwa/zinapokelewa
+  -- typing_indicator -> "anaandika..." inaonekana kwa mwenzake
+  -- show_online    -> "Online"/last seen inaonekana kwa wengine
+  -- discoverable   -> unaonekana kwenye Discover (swipe cards)
+  read_receipts_enabled boolean not null default true,
+  typing_indicator_enabled boolean not null default true,
+  show_online_status_enabled boolean not null default true,
+  discoverable boolean not null default true,
+  -- vibration -> simu inatetema kwa arifa mpya
+  -- sound     -> sauti inapigwa kwa arifa mpya
+  vibration_enabled boolean not null default true,
+  sound_enabled boolean not null default true,
   is_online boolean not null default false,
   last_seen text,
   is_profile_complete boolean not null default false,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+-- Idempotent migration: huongeza columns mpya kama table ilikuwepo tayari
+-- kutoka version ya awali ya app. Salama ku-run mara nyingi.
+do $$
+declare
+  col text;
+begin
+  foreach col in array array[
+    'chat_unlock_price',
+    'location_enabled',
+    'notifications_enabled',
+    'read_receipts_enabled',
+    'typing_indicator_enabled',
+    'show_online_status_enabled',
+    'discoverable',
+    'vibration_enabled',
+    'sound_enabled',
+    'is_online',
+    'is_profile_complete'
+  ] loop
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = 'users' and column_name = col
+    ) then
+      if col in ('location_enabled', 'is_online', 'is_profile_complete') then
+        execute format('alter table public.users add column %I boolean not null default false', col);
+      elsif col = 'notifications_enabled' then
+        execute format('alter table public.users add column %I boolean not null default true', col);
+      elsif col in ('read_receipts_enabled', 'typing_indicator_enabled', 'show_online_status_enabled', 'discoverable', 'vibration_enabled', 'sound_enabled') then
+        execute format('alter table public.users add column %I boolean not null default true', col);
+      elsif col = 'chat_unlock_price' then
+        execute format('alter table public.users add column %I int not null default 0', col);
+      else
+        execute format('alter table public.users add column %I boolean', col);
+      end if;
+    end if;
+  end loop;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'users' and column_name = 'last_seen'
+  ) then
+    alter table public.users add column last_seen text;
+  end if;
+end $$;
+
+
 
 -- ---------- SWIPES ----------
 create table if not exists public.swipes (
@@ -68,7 +127,22 @@ create table if not exists public.chat_rooms (
   created_at timestamptz default now()
 );
 
--- ---------- MESSAGES ----------
+-- Chat lock: `unlocked_by` inaorodhesha walioLIPA kufungua chat (milele).
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'chat_rooms' and column_name = 'unlocked_by'
+  ) then
+    alter table public.chat_rooms add column unlocked_by uuid[] not null default '{}';
+  end if;
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'chat_rooms' and column_name = 'typing'
+  ) then
+    alter table public.chat_rooms add column typing uuid;
+  end if;
+end $$;
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
   chat_id text not null,
@@ -85,14 +159,35 @@ create table if not exists public.messages (
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
   to_uid uuid not null references auth.users (id) on delete cascade,
-  type text not null default 'message', -- match | message | gift | coins
+  type text not null default 'message', -- match | message | gift | coins | missed_call
   title text not null default '',
   description text not null default '',
   read boolean not null default false,
   created_at timestamptz default now()
 );
 
--- ---------- GIFTS ----------
+-- Missed calls huhitaji taarifa za anayetuma (kwa ajili ya avatar/jina
+-- kwenye section ya "Missed Calls"). Idempotent — salama ku-run mara nyingi.
+alter table public.notifications add column if not exists from_uid uuid;
+alter table public.notifications add column if not exists from_name text;
+
+-- ---------- GIFTS SENT (historia ya zawadi zilizotumwa) ----------
+-- INAUNDWA HAPA (kabla ya triggers hapo chini) ili script i-run kwa
+-- mpangilio sahihi: kwanza table, kisha triggers zinazoirejelea.
+create table if not exists public.gifts_sent (
+  id uuid primary key default gen_random_uuid(),
+  from_uid uuid not null references auth.users (id) on delete cascade,
+  to_uid uuid not null references auth.users (id) on delete cascade,
+  gift_id text not null default '',
+  gift_name text not null default '',
+  gift_emoji text not null default '',
+  gift_image_url text not null default '',
+  coin_cost int not null default 0,
+  sent_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+
+-- GIFTS (catalogue — everyone reads, no client writes)
 create table if not exists public.gifts (
   id text primary key,
   name text not null,
@@ -132,6 +227,56 @@ insert into public.gifts (id, name, emoji, coin_price, tier, glow_color) values
   ('g9', 'Island',       E'\U0001F3DD\uFE0F', 500, 'luxury', '0xFF00C9A7')
 on conflict (id) do nothing;
 
+-- ---------- USER STATS (likes + gifts + rating — counters za umma) ----------
+-- Counters hizi husasishwa na triggers hapa chini, UI inazisoma moja kwa
+-- moja kutoka public.users (select tayari inaruhusiwa kwa authenticated).
+alter table public.users add column if not exists likes_received_count int not null default 0;
+alter table public.users add column if not exists gifts_received_count int not null default 0;
+alter table public.users add column if not exists gifts_received_value int not null default 0;
+alter table public.users add column if not exists rating_sum bigint not null default 0;
+alter table public.users add column if not exists rating_count int not null default 0;
+
+-- Trigger: kila like mpya ('like' kwenye swipes) inaongeza counter ya mpokeaji.
+create or replace function public.bump_likes_received()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if TG_OP = 'INSERT' and NEW.action = 'like' then
+    update public.users set likes_received_count = likes_received_count + 1
+    where uid = NEW.target_uid;
+  elsif TG_OP = 'UPDATE' and OLD.action is distinct from NEW.action then
+    if NEW.action = 'like' then
+      update public.users set likes_received_count = likes_received_count + 1
+      where uid = NEW.target_uid;
+    else
+      update public.users set likes_received_count = greatest(likes_received_count - 1, 0)
+      where uid = OLD.target_uid;
+    end if;
+  elsif TG_OP = 'DELETE' and OLD.action = 'like' then
+    update public.users set likes_received_count = greatest(likes_received_count - 1, 0)
+    where uid = OLD.target_uid;
+  end if;
+  if TG_OP = 'DELETE' then return OLD; else return NEW; end if;
+end $$;
+drop trigger if exists trg_bump_likes_received on public.swipes;
+create trigger trg_bump_likes_received
+  after insert or update or delete on public.swipes
+  for each row execute function public.bump_likes_received();
+
+-- Trigger: kila zawadi inayoingizwa kwenye gifts_sent inaongeza counter + thamani.
+create or replace function public.bump_gifts_received()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  update public.users
+  set gifts_received_count = gifts_received_count + 1,
+      gifts_received_value = gifts_received_value + coalesce(NEW.coin_cost, 0)
+  where uid = NEW.to_uid;
+  return NEW;
+end $$;
+drop trigger if exists trg_bump_gifts_received on public.gifts_sent;
+create trigger trg_bump_gifts_received
+  after insert on public.gifts_sent
+  for each row execute function public.bump_gifts_received();
+
 -- ---------- COIN PURCHASES ----------
 create table if not exists public.coin_purchases (
   id uuid primary key default gen_random_uuid(),
@@ -140,6 +285,50 @@ create table if not exists public.coin_purchases (
   amount numeric not null default 0,
   created_at timestamptz default now()
 );
+
+-- ---------- RATINGS (nyota 1-5 kwa wasifu) ----------
+create table if not exists public.ratings (
+  from_uid uuid not null references auth.users (id) on delete cascade,
+  to_uid uuid not null references auth.users (id) on delete cascade,
+  stars int not null check (stars between 1 and 5),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  primary key (from_uid, to_uid),
+  check (from_uid <> to_uid)
+);
+
+alter table public.ratings enable row level security;
+
+-- NOTE: RLS policies za ratings ziko chini kwenye section ya RLS
+-- (pamoja na gifts_sent) ili zote zi-run baada ya ENABLE ROW LEVEL SECURITY.
+
+create or replace function public.apply_rating_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if TG_OP = 'INSERT' then
+    update public.users
+    set rating_sum = rating_sum + NEW.stars,
+        rating_count = rating_count + 1
+    where uid = NEW.to_uid;
+    return NEW;
+  elsif TG_OP = 'UPDATE' then
+    update public.users
+    set rating_sum = rating_sum - OLD.stars + NEW.stars
+    where uid = NEW.to_uid;
+    return NEW;
+  elsif TG_OP = 'DELETE' then
+    update public.users
+    set rating_sum = greatest(rating_sum - OLD.stars, 0),
+        rating_count = greatest(rating_count - 1, 0)
+    where uid = OLD.to_uid;
+    return OLD;
+  end if;
+  return NEW;
+end $$;
+drop trigger if exists trg_apply_rating_change on public.ratings;
+create trigger trg_apply_rating_change
+  after insert or update or delete on public.ratings
+  for each row execute function public.apply_rating_change();
 
 
 -- ============================================================
@@ -173,6 +362,8 @@ alter table public.chat_rooms enable row level security;
 alter table public.messages enable row level security;
 alter table public.notifications enable row level security;
 alter table public.gifts enable row level security;
+alter table public.gifts_sent enable row level security;
+alter table public.ratings enable row level security;
 alter table public.coin_purchases enable row level security;
 
 -- USERS
@@ -227,16 +418,147 @@ drop policy if exists "notifications insert any" on public.notifications;
 create policy "notifications insert any" on public.notifications
   for insert to authenticated with check (true);
 
+-- ---------- SWIPES: ruhusu kusoma likes zako mwenyewe (Likes screen) ----------
+-- Sera ya awali ("swipes self all") inaruhusu kusoma swipes zako TU
+-- (from_uid = wewe), kwa hiyo Likes screen (target_uid = wewe) inarudisha
+-- rows 0 kila wakati na inaonekana kama hakuna data. Tunaongeza sera ya
+-- ziada bila kuivunja ya awali: mpokeaji anaweza kuona likes alizopokea.
+drop policy if exists "swipes incoming likes readable" on public.swipes;
+create policy "swipes incoming likes readable" on public.swipes
+  for select to authenticated using (target_uid = auth.uid());
+
+-- Realtime pia kwa tables mpya (salama ku-run tena).
+do $$
+declare t text;
+begin
+  foreach t in array array['gifts_sent', 'ratings'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
+
+-- Mtumaji anaona alizotuma, mpokeaji anaona alizopokea.
+drop policy if exists "gifts_sent participants read" on public.gifts_sent;
+create policy "gifts_sent participants read" on public.gifts_sent
+  for select to authenticated
+  using (from_uid = auth.uid() or to_uid = auth.uid());
+drop policy if exists "gifts_sent sender insert" on public.gifts_sent;
+create policy "gifts_sent sender insert" on public.gifts_sent
+  for insert to authenticated with check (from_uid = auth.uid());
+
 -- GIFTS (catalogue — everyone reads, no client writes)
 drop policy if exists "gifts readable" on public.gifts;
 create policy "gifts readable" on public.gifts
   for select to authenticated using (true);
 
--- COIN PURCHASES
+-- RATINGS (nyota 1-5): kila mtu anaona, kila mtu anaandika yake mwenyewe tu.
+drop policy if exists "ratings readable" on public.ratings;
+create policy "ratings readable" on public.ratings
+  for select to authenticated using (true);
+drop policy if exists "ratings self insert" on public.ratings;
+create policy "ratings self insert" on public.ratings
+  for insert to authenticated with check (from_uid = auth.uid());
+drop policy if exists "ratings self update" on public.ratings;
+create policy "ratings self update" on public.ratings
+  for update to authenticated
+  using (from_uid = auth.uid()) with check (from_uid = auth.uid());
+
+-- ---------- RPC: SEND GIFT (atomic — punguzo + historia + notification) ----------
+-- Kuitumia kunazuia "double spend" (row ya mtumaji inafungwa na FOR UPDATE)
+-- na huruhusu kuandika gifts_sent + notifications bila kuvunja RLS
+-- (function ina SECURITY DEFINER — ina-run na haki za owner, si za caller).
+create or replace function public.send_gift(
+  p_to_uid uuid,
+  p_gift_id text,
+  p_gift_name text,
+  p_gift_emoji text default '',
+  p_gift_image_url text default '',
+  p_coin_cost int default 0,
+  p_from_name text default 'Mtumiaji'
+) returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_from_uid uuid := auth.uid();
+  v_balance int;
+begin
+  if v_from_uid is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_to_uid = v_from_uid then
+    raise exception 'CANNOT_GIFT_SELF';
+  end if;
+  if coalesce(p_coin_cost, 0) < 0 then
+    raise exception 'INVALID_PRICE';
+  end if;
+
+  -- Funga row ya mtumaji ili kuzuia double-spend (bonyeza mara 2 haraka).
+  select coins into v_balance from public.users where uid = v_from_uid for update;
+  if not found then
+    raise exception 'SENDER_NOT_FOUND';
+  end if;
+  if v_balance < coalesce(p_coin_cost, 0) then
+    raise exception 'INSUFFICIENT_COINS';
+  end if;
+
+  update public.users
+  set coins = coins - coalesce(p_coin_cost, 0),
+      total_spent_coins = total_spent_coins + coalesce(p_coin_cost, 0),
+      updated_at = now()
+  where uid = v_from_uid;
+
+  insert into public.gifts_sent
+    (from_uid, to_uid, gift_id, gift_name, gift_emoji, gift_image_url, coin_cost)
+  values
+    (v_from_uid, p_to_uid, p_gift_id, p_gift_name,
+     coalesce(p_gift_emoji, ''), coalesce(p_gift_image_url, ''),
+     coalesce(p_coin_cost, 0));
+
+  insert into public.notifications (to_uid, type, title, description, created_at, read)
+  values (p_to_uid, 'gift', 'Umepokea Zawadi Mpya! 🎁',
+    coalesce(p_from_name, 'Mtumiaji') || ' amekutumia ' ||
+    coalesce(nullif(p_gift_emoji, ''), '🎁') || ' ' || p_gift_name || '.',
+    now(), false);
+
+  select coins into v_balance from public.users where uid = v_from_uid;
+  return jsonb_build_object('ok', true, 'balance', v_balance);
+end $$;
+
+-- ---------- BACKFILL COUNTERS (kwa watumiaji waliopo — salama ku-run tena) ----------
+-- Likes zilizopo kabla ya trigger (kwa waliopokea tu ndio tunasasisha).
+update public.users u
+set likes_received_count = coalesce(s.c, 0)
+from (select target_uid, count(*) as c from public.swipes where action = 'like' group by target_uid) s
+where u.uid = s.target_uid and u.likes_received_count = 0;
+
+-- Gifts zilizopo kabla ya trigger.
+update public.users u
+set gifts_received_count = coalesce(g.c, 0),
+    gifts_received_value = coalesce(g.v, 0)
+from (select to_uid, count(*) as c, coalesce(sum(coin_cost), 0) as v
+      from public.gifts_sent group by to_uid) g
+where u.uid = g.to_uid and u.gifts_received_count = 0;
+
+-- ---------- COIN PURCHASES RLS ----------
 drop policy if exists "coin purchases self all" on public.coin_purchases;
 create policy "coin purchases self all" on public.coin_purchases
   for all to authenticated using (uid = auth.uid())
   with check (uid = auth.uid());
+
+-- ============================================================
+-- STORAGE BUCKETS (can also be created in the Supabase UI)
+-- ============================================================
+insert into storage.buckets (id, name, public)
+values ('avatars', 'avatars', true)
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
+values ('chat_media', 'chat_media', true)
+on conflict (id) do nothing;
 
 -- ============================================================
 -- STORAGE BUCKETS (can also be created in the Supabase UI)

@@ -10,140 +10,145 @@ class PrivacyPolicyScreen extends StatelessWidget {
 
   static const List<LegalSection> _sections = [
     LegalSection(
-      '1. Taarifa Tunazokusanya • Data We Collect (Data Minimization)',
+      '1. Data We Collect (Data Minimization)',
       icon: Icons.folder_shared_rounded,
       body:
-          'Tunafuata kanuni ya DATA MINIMIZATION — tunaunganisha/kuhifadhi '
-          'taarifa CHACHE TU zinazohitajika ili app ifanye kazi. Tunakusanya '
-          'yafuatayo, na kila kipengele kina sababu yake maalum:',
+          'We follow the principle of DATA MINIMIZATION — we connect/store '
+          'only the SMALL amount of data needed for the app to work. We '
+          'collect the following, and each item has a specific purpose:',
       bulletRows: [
         (
           'Account',
-          'Jina, umri/tarehe ya kuzaliwa, jinsia, picha za profile, bio na '
-              'interests — hutumika kuonyesha profile yako kwa matches.',
+          'Name, age/date of birth, gender, profile photos, bio and '
+              'interests — used to show your profile to matches.',
         ),
         (
           'Contact',
-          'Namba ya simu / barua pepe — kwa usalama wa akaunti na kuingia tu.',
+          'Phone number / email — for account security and sign-in only.',
         ),
         (
-          'Location (hiari)',
-          'Eneo lako la takribani LINAKUSANYWA TU ukiwasha location. '
-              'Hutumika kwa matching ya watu walio karibu nawe pekee.',
+          'Location (optional)',
+          'Your approximate location is collected ONLY when you enable '
+              'location. Used only to match you with people nearby.',
         ),
         (
           'Messages',
-          'Jumbe na voice notes unazotuma — huhifadhiwa ili mazungumzo '
-              'yako yawe sawa kwenye simu yako na ya mwenzako.',
+          'Messages and voice notes you send — stored so your '
+              'conversations stay in sync between your phone and the '
+              'other person\'s.',
         ),
         (
           'Push token',
-          'Token ya noti (FCM) — ili kupokea noti za match na jumbe mpya.',
+          'Notification token (FCM) — to receive match and new-message '
+              'notifications.',
         ),
         (
           'Purchases',
-          'Hali ya coins na VIP badge yako — kwa ajili ya vitufe vya coins, '
-              'gifts na VIP ndani ya app.',
+          'Your coins balance and VIP badge status — for the coins, '
+              'gifts and VIP features inside the app.',
         ),
       ],
     ),
     LegalSection(
-      '2. Hatufanyi Tracking • No Tracking or Advertising',
+      '2. No Tracking or Advertising',
       icon: Icons.do_not_disturb_on_rounded,
       body:
-          'App hii HAINA vifaa vyovyote vya kufuatilia (tracking). Hakuna '
-          'analytics SDK, hakuna advertising SDK, hakuna matumizi ya '
-          'advertising ID yako. Hatufuatilii matumizi yako ya app nyingine, '
-          'hatuuzi au kushiriki data zako na data brokers, na hatengenezi '
-          'profile yoyote ya matangazo.',
+          'This app contains NO tracking tools of any kind. No analytics '
+          'SDK, no advertising SDK, and we never use your advertising ID. '
+          'We do not monitor your use of other apps, we do not sell or '
+          'share your data with data brokers, and we do not build any '
+          'advertising profile.',
     ),
     LegalSection(
-      '3. Hakuna Embeds za Watu Wengine • No Third-Party Embeds',
+      '3. No Third-Party Embeds',
       icon: Icons.extension_off_rounded,
       body:
-          'Kila screen ya app hii imejengwa kwa code yetu wenyewe — hakuna '
-          'webviews, iframes, video za nje, social widgets (mfano "Like" '
-          'buttons), au scripts za watu wengine zinazoendesha ndani ya app. '
-          'Kwa sababu hiyo, hakuna mtu wa tatu anayeweza kuweka trackers '
-          'ndani ya app yetu.',
+          'Every screen of this app is built with our own code — there '
+          'are no webviews, iframes, external videos, social widgets '
+          '(e.g. "Like" buttons), or third-party scripts running inside '
+          'the app. Because of that, no third party can place trackers '
+          'inside our app.',
     ),
     LegalSection(
-      '4. Huduma za Msingi • Service Providers (Infrastructure Only)',
+      '4. Service Providers (Infrastructure Only)',
       icon: Icons.cloud_rounded,
       body:
-          'Tunatumia Google Firebase kama miundombinu tu ya kuendesha app. '
-          'Hii ndiyo huduma pekee za mtu wa tatu zinazogusa data zako:',
+          'We use Google Firebase purely as the infrastructure to run the '
+          'app. These are the only third-party services that touch your '
+          'data:',
       bulletRows: [
-        ('Firebase Auth', 'Kuthibitisha akaunti yako unapoingia.'),
-        ('Cloud Firestore', 'Kuhifadhi profile, matches na jumbe zako.'),
-        ('Firebase Storage', 'Kuhifadhi picha na voice notes unazopakia.'),
-        ('Firebase Messaging', 'Kutuma noti za match na jumbe mpya.'),
+        ('Firebase Auth', 'Verifies your account when you sign in.'),
+        ('Cloud Database', 'Stores your profile, matches and messages.'),
+        ('Cloud Storage', 'Stores the photos and voice notes you upload.'),
+        ('Push Messaging', 'Delivers match and new-message notifications.'),
       ],
     ),
     LegalSection(
-      '5. Jinsi Tunavyotumia Data Zako • How We Use Your Data',
+      '5. How We Use Your Data',
       icon: Icons.settings_rounded,
       body:
-          'Data zako zinatumika KWA APP HII PEKEE: kukuonyesha matches '
-          'zinazofaa, kufanya chat na voice notes zifike, kukutumia noti, '
-          'kudhibiti coins/gifts/VIP, na kuzuia matumizi mabaya (spam, '
-          'scams, uwongo). Hatutumii data zako kwa ajili ya matangazo wala '
-          'kwa madhumuni mengine yasiyo na lazima.',
+          'Your data is used FOR THIS APP ONLY: showing you relevant '
+          'matches, delivering chats and voice notes, sending you '
+          'notifications, managing coins/gifts/VIP, and preventing abuse '
+          '(spam, scams, lies). We do not use your data for advertising '
+          'or any other unnecessary purpose.',
     ),
     LegalSection(
-      '6. Eneo (Location) • Location Data',
+      '6. Location Data',
       icon: Icons.location_on_outlined,
       body:
-          'Location ni HIARI. Ukiwasha location kwenye app, tunahifadhi '
-          'eneo lako la TAKRIBANI (coordinates) kwa ajili ya kukupatia '
-          'matches walio karibu nawe tu. Unaweza kuizima wakati wowote '
-          'kutoka kwenye settings za simu yako, na hatufuatilii mahali '
-          'ulipokwenda (hakuna location history).',
+          'Location is OPTIONAL. If you enable location in the app, we '
+          'store your APPROXIMATE location (coordinates) only to find '
+          'matches near you. You can turn it off at any time from your '
+          'phone settings, and we do not track where you have been (no '
+          'location history).',
     ),
     LegalSection(
-      '7. Usalama • Security',
+      '7. Security',
       icon: Icons.security_rounded,
       body:
-          'Data zako huhifadhiwa kwenye miundombinu ya Firebase (Google '
-          'Cloud) yenye usimbaji fiche wa data inayosafiri (encryption in '
-          'transit). Hatuhifadhi taarifa za kadi yako — unaponunua coins au '
-          'VIP, malipo yanashughulikiwa na Google Play / App Store, sisi '
-          'tunapokea uthibitisho wa ununulio tu.',
+          'Your data is stored on secure cloud infrastructure with '
+          'encryption in transit. We never store your card details — '
+          'when you buy coins or VIP, payments are handled by Google '
+          'Play / App Store and we only receive the purchase '
+          'confirmation.',
     ),
     LegalSection(
-      '8. Kuhifadhi na Kufuta Data • Retention & Deletion',
+      '8. Retention & Deletion',
       icon: Icons.auto_delete_rounded,
       body:
-          'Tunahifadhi data zako tu alivyo hai akaunti yako. Ukiomba '
-          'kufuta akaunti yako (au unafuta mwenyewe kutoka Settings), '
-          'profile yako, picha zako na jumbe zako zinaondolewa. Noti token '
-          'yako inafutwa pia ili usipokee noti tena.',
+          'We keep your data only while your account is active. If you '
+          'request account deletion (or delete it yourself from '
+          'Settings), your profile, photos and messages are removed. '
+          'Your notification token is also deleted so you no longer '
+          'receive notifications.',
     ),
     LegalSection(
-      '9. Haki Zako • Your Rights',
+      '9. Your Rights',
       icon: Icons.verified_user_rounded,
       body:
-          'Una haki ya: kuona data zako (profile yako), kurekebisha data '
-          'zisizo sahihi kupitia Edit Profile, kufuta akaunti yako, '
-          'kuzima location na noti kutoka settings za simu, na kuuliza '
-          'chochote kuhusu data zako. Hatuuzi data zako na hatuhamishi '
-          'kwa watoa huduma isipokuwa Firebase iliyoelezwa hapo juu.',
+          'You have the right to: see your data (your profile), correct '
+          'inaccurate data via Edit Profile, delete your account, turn '
+          'off location and notifications from your phone settings, and '
+          'ask anything about your data. We do not sell your data and we '
+          'do not transfer it to providers other than the infrastructure '
+          'described above.',
     ),
     LegalSection(
-      '10. Watoto • Children',
+      '10. Children',
       icon: Icons.child_care_rounded,
       body:
-          'App hii ni kwa watu wenye umri wa miaka 18+ TU. Hatukusanyi '
-          'kwa makusudi taarifa za watoto. Ukitambua akaunti ya mtu chini '
-          'ya miaka 18, tafadhali ripoti kwa timu yetu.',
+          'This app is for people aged 18+ ONLY. We do not knowingly '
+          'collect data from children. If you become aware of an account '
+          'belonging to someone under 18, please report it to our team.',
     ),
     LegalSection(
-      '11. Mawasiliano • Contact',
+      '11. Contact',
       icon: Icons.support_agent_rounded,
       body:
-          'Kama una swali lolote kuhusu sera hii ya faragha, au unataka '
-          'data yako ifutwe, wasiliana na timu yetu ya huduma kwa wateja '
-          'kupitia msaada wa ndani ya app (Support).',
+          'If you have any question about this privacy policy, or you '
+          'want your data deleted, contact our customer support team via '
+          'the in-app support (Support).',
     ),
   ];
 
@@ -151,12 +156,12 @@ class PrivacyPolicyScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return LegalPageScaffold(
       title: 'Privacy Policy',
-      swahiliTitle: 'Sera ya Faragha',
+      headerTitle: 'Privacy Policy',
       subtitle:
-          'Tunathamini faragha yako. Tunaunganisha data CHACHE TU '
-          'zinazohitajika, hatufanyi tracking, na hakuna embeds za watu '
-          'wengine ndani ya app.',
-      lastUpdated: 'Imesasishwa • Last updated: June 2026',
+          'We respect your privacy. We collect only the SMALL amount of '
+          'data needed, we do no tracking, and there are no third-party '
+          'embeds inside the app.',
+      lastUpdated: 'Last updated: June 2026',
       headerIcon: Icons.privacy_tip_rounded,
       sections: _sections,
     );

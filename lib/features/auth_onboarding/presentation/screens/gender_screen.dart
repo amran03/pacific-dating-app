@@ -3,7 +3,14 @@ import '../../../../core/constants/app_color.dart';
 import 'photo_upload_screen.dart';
 
 class GenderScreen extends StatefulWidget {
-  const GenderScreen({super.key});
+  final String firstName;
+  final DateTime birthDate;
+
+  const GenderScreen({
+    super.key,
+    required this.firstName,
+    required this.birthDate,
+  });
 
   @override
   State<GenderScreen> createState() => _GenderScreenState();
@@ -104,7 +111,11 @@ class _GenderScreenState extends State<GenderScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const PhotoUploadScreen(),
+                        builder: (context) => PhotoUploadScreen(
+                          firstName: widget.firstName,
+                          birthDate: widget.birthDate,
+                          gender: selectedGender,
+                        ),
                       ),
                     );
                   },
