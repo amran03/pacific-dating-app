@@ -1,5 +1,24 @@
 # Kutengeneza Release APK — Pacific Dating App
 
+## ⬇️ Pakua APK tayari (GitHub Release)
+
+APK ya release ipo kwenye GitHub — hakuna haja ya kujenga mwenyewe:
+
+**https://github.com/amran03/pacific-dating-app/releases/download/v1.0.0/Pacific-v1.0.0-release.apk**
+
+| Kipimo | Thamani |
+|---|---|
+| Ukubwa | 87.47 MB |
+| SHA-256 | `9da5188f3069f8bc705ce533b46dff8c5adb9cc11c77b86d473f70a0ca581d8f` |
+
+Ukurasa wa release: https://github.com/amran03/pacific-dating-app/releases/tag/v1.0.0
+
+Thibitisha faili uliyopakua:
+
+```powershell
+Get-FileHash .\Pacific-v1.0.0-release.apk -Algorithm SHA256
+```
+
 ## Faili lililotengenezwa
 
 ```
