@@ -57,6 +57,9 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   // Permissions State
   bool _locationGranted = false;
   bool _notificationGranted = false;
+  bool _cameraGranted = false;
+  bool _micGranted = false;
+  bool _mediaGranted = false;
   double? _latitude;
   double? _longitude;
   String? _fcmToken;
@@ -692,16 +695,63 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             title: "Location Access",
             subtitle: "Helps find and show people who are geographically close to you.",
             icon: Icons.location_on_rounded,
+            systemPermission: Permission.location,
             value: _locationGranted,
-            onChanged: (val) => setState(() => _locationGranted = val),
+            onGranted: () async {
+              // Chukua GPS coordinates halisi ili ziweze kutumika
+              // baadaye kuhesabu umbali kati yako na watumiaji
+              // wengine kwenye Discover.
+              try {
+                final position = await Geolocator.getCurrentPosition(
+                  locationSettings: const LocationSettings(
+                    accuracy: LocationAccuracy.medium,
+                  ),
+                );
+                _latitude = position.latitude;
+                _longitude = position.longitude;
+                setState(() => _locationGranted = true);
+              } catch (e) {
+                _showSnackBar("Failed to get your location: $e");
+              }
+            },
           ),
           const SizedBox(height: 16),
           _buildPermissionSwitch(
             title: "Notifications",
             subtitle: "Receive instant messages and notifications about likes from others.",
             icon: Icons.notifications_active_rounded,
+            systemPermission: Permission.notification,
             value: _notificationGranted,
-            onChanged: (val) => setState(() => _notificationGranted = val),
+            onGranted: () async {
+              setState(() => _notificationGranted = true);
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildPermissionSwitch(
+            title: "Camera & Media",
+            subtitle: "Take photos and pick images from your gallery for your profile and chats.",
+            icon: Icons.photo_camera_rounded,
+            systemPermission: Permission.camera,
+            value: _cameraGranted,
+            onGranted: () async {
+              setState(() => _cameraGranted = true);
+              // Ruhusa ya gallery/media inaombwa mara moja tu
+              // (Android 13+: READ_MEDIA_IMAGES; zaidi: storage).
+              if (_mediaGranted) return;
+              final media = await Permission.photos.request();
+              setState(() => _mediaGranted = media.isGranted || media.isLimited);
+            },
+          ),
+          const SizedBox(height: 16),
+          _buildPermissionSwitch(
+            title: "Microphone (Voice Recording)",
+            subtitle: "Needed for voice notes, voice calls and video calls.",
+            icon: Icons.mic_rounded,
+            systemPermission: Permission.microphone,
+            value: _micGranted,
+            onGranted: () async {
+              setState(() => _micGranted = true);
+            },
           ),
         ],
       ),
@@ -910,7 +960,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
     required String subtitle,
     required IconData icon,
     required bool value,
-    required Function(bool) onChanged,
+    required Future<void> Function() onGranted,
+    Permission? systemPermission,
   }) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -943,38 +994,26 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             value: value,
             activeThumbColor: _themeColor,
             onChanged: (val) async {
-              if (val) {
-                if (title.contains("Location")) {
-                  PermissionStatus status = await Permission.location.request();
-                  if (status.isGranted) {
-                    // Chukua GPS coordinates halisi ili ziweze kutumika
-                    // baadaye kuhesabu umbali kati yako na watumiaji
-                    // wengine kwenye Discover.
-                    try {
-                      final position = await Geolocator.getCurrentPosition(
-                        locationSettings: const LocationSettings(
-                          accuracy: LocationAccuracy.medium,
-                        ),
-                      );
-                      _latitude = position.latitude;
-                      _longitude = position.longitude;
-                      onChanged(true);
-                    } catch (e) {
-                      _showSnackBar("Failed to get your location: $e");
-                    }
-                  } else if (status.isPermanentlyDenied) {
-                    _showSnackBar("You previously denied Location permission. Open Settings to enable it.");
-                    openAppSettings();
-                  } else {
-                    _showSnackBar("You can't see people near you without Location permission.");
-                  }
-                } else if (title.contains("Notifications")) {
-                  // Notification support depends on your integration plan.
-                  // For now, we simply enable the toggle.
-                  onChanged(true);
-                }
+              if (!val) return;
+              // Hakuna ruhusa ya system inayoombwa — chagua tu (inline switch).
+              final permission = systemPermission;
+              if (permission == null) {
+                await onGranted();
+                return;
+              }
+
+              final status = await permission.request();
+              if (status.isGranted || status.isLimited) {
+                await onGranted();
+              } else if (status.isPermanentlyDenied) {
+                _showSnackBar(
+                  "You previously denied this permission. Open Settings to enable it.",
+                );
+                await openAppSettings();
               } else {
-                onChanged(false);
+                _showSnackBar(
+                  "This feature works best with the permission enabled.",
+                );
               }
             },
           ),

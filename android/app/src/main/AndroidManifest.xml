@@ -9,6 +9,16 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
+    <!-- Media ya gallery (Android 13+) — picha, video na audio za chat -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <!-- Audio routing + vibration + screen keep-on wakati wa simu (calls) -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <!-- Permissions kwa ajili ya Location (Discover - watu walio karibu) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -18,7 +28,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="pacific_dating_app"
+        android:label="Pacific"
         android:name="${applicationName}"
         android:icon="@mipmap/launcher_icon">
         <activity

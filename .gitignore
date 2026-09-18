@@ -46,3 +46,27 @@ app.*.map.json
 
 # Agent artifacts
 .artifacts/
+
+# Android build artifacts
+/android/build/
+
+# Debug / scratch scripts and logs (local only)
+build_err.txt
+build_log.txt
+deno_check.txt
+db_dump_check.sql
+check_notif.py
+dump2.py
+dump3.py
+dump_notif.py
+fixA.py
+fixB.py
+fixBC.py
+fixC.py
+patch_notif.py
+patch_notif2.py
+patch_notif3.py
+patch_notif4.py
+
+# Supabase CLI temp/state files
+supabase/.temp/

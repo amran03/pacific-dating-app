@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/features/profile/presentation/screens/payment_webview_screen.dart';
+import 'package:pacific_dating_app/services/pesapal_service.dart';
 
-/// Kifurushi kimoja cha Coins - 1 Coin = 100 TSH (kiwango cha ubadilishaji
-/// kilichoombwa). Bei ni coins * 100.
+/// Kifurushi kimoja cha Coins - 1 Coin = 25 TSH (kiwango cha ubadilishaji
+/// kilichoombwa). Bei ni coins * 25.
 class _CoinPackage {
   final int coins;
   final String? badge; // mfano "Maarufu" au "Zaidi ya thamani"
 
   const _CoinPackage(this.coins, {this.badge});
 
-  int get priceTsh => coins * 100;
+  int get priceTsh => coins * PesapalService.kCoinRateTzs;
 }
 
 const List<_CoinPackage> _kCoinPackages = [
@@ -22,20 +24,23 @@ const List<_CoinPackage> _kCoinPackages = [
   _CoinPackage(3000),
 ];
 
-/// Skrini ya kununua Coins. 1 Coin = 100 TSH.
+/// Skrini ya kununua Coins. 1 Coin = 25 TSH.
 ///
-/// MUHIMU (soma kabla ya ku-deploy kibiashara): Skrini hii to sasa
-/// inaunganisha moja to moja na Supabase kuongeza coins BILA malipo
-/// halisi ya pesa - ni MODE YA MAJARIBIO ili uweze kujaribu mtiririko
-/// mzima wa app yako (coins zikitumika to gifts n.k.) bila kusubiri
-/// malipo halisi kuunganishwa.
+/// MTIRIRIKO WA MALIPO (PesaPal API 3.0):
+///   1. Mtumiaji anagusa kifurushi -> [PesapalService.createOrder] inaita
+///      Edge Function `create-pesapal-order` (server inahesabu kiasi,
+///      inaunda order kwa PesaPal, inahifadhi rekodi ya PENDING).
+///   2. [PaymentWebViewScreen] inafungua redirect_url ya PesaPal kwenye WebView.
+///   3. Mtumiaji akimaliza kulipa, PesaPal inaipiga `pesapal-ipn` (webhook)
+///      na inamrudisha kwenye `pesapal-return` (callback_url).
+///   4. Edge Function inathibitisha malipo kwa GetTransactionStatus, inaweka
+///      transactions = COMPLETED na inaongeza `coins` kwenye profile ya
+///      mtumiaji (service_role - Flutter haiwezi kuongeza coins yenyewe).
+///   5. Skrini hii inaonyesha matokeo; StreamBuilder ya salio inajisasisha
+///      yenyewe (Realtime).
 ///
-/// Kuunganisha malipo halisi (M-Pesa, Tigo Pesa, Airtel Money, au Card
-/// kupitia Stripe/Flutterwave/Selcom) kunahitaji: (1) akaunti ya
-/// mtoa-huduma wa malipo, (2) Edge Function ya kuthibitisha malipo
-/// upande wa server kabla ya kuongeza coins (ili mtu asiweze kudanganya
-/// app to kuruka malipo). Hilo ni hatua inayofuata - niambie ukiwa
-/// tayari kuchagua mtoa-huduma wa malipo, nitakusaidia kuiunganisha.
+/// consumer_key/consumer_secret HAZIPO kwenye code hii — ziko kwenye
+/// Supabase Edge Function secrets pekee.
 class BuyCoinsScreen extends StatefulWidget {
   const BuyCoinsScreen({super.key});
 
@@ -61,57 +66,161 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
   Future<void> _purchasePackage(int index, _CoinPackage package) async {
     if (_processingIndex != null) return;
 
-    final client = Supabase.instance.client;
-    final user = client.auth.currentUser;
-    if (user == null) return;
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      _showSnack("Please sign in to buy coins.");
+      return;
+    }
 
     setState(() => _processingIndex = index);
 
     try {
-      // Fetch current coins
-      final userResponse = await client.from('users').select('coins').eq('uid', user.id).single();
-      final int currentCoins = (userResponse['coins'] ?? 0) as int;
+      // Namba ya simu inahitajika kwa PesaPal (M-Pesa/Tigo/Airtel/Card).
+      final String phone = await _resolvePhoneNumber(user.id);
+      if (phone.isEmpty) {
+        if (mounted) setState(() => _processingIndex = null);
+        return;
+      }
 
-      // Update coins
-      await client.from('users').update({
-        'coins': currentCoins + package.coins,
-      }).eq('uid', user.id);
-
-      // Rekodi ununuzi to historia + arifa (NotificationScreen inaisoma hii)
-      await client.from('notifications').insert({
-        'to_uid': user.id,
-        'type': 'coins',
-        'title': 'Coins Added! 🪙',
-        'description': 'You successfully bought ${package.coins} Coins.',
-        'created_at': DateTime.now().toIso8601String(),
-        'read': false,
-      });
-
-      await client.from('coin_purchases').insert({
-        'uid': user.id,
-        'coins': package.coins,
-        'price_tsh': package.priceTsh,
-        'purchased_at': DateTime.now().toIso8601String(),
-        'status': 'test_mode', // itabadilika kuwa 'paid' baada ya malipo halisi
-      });
+      // 1) Unda order kwa PesaPal kupitia Edge Function (server side).
+      final PesapalOrderResult order = await PesapalService.instance.createOrder(
+        coins: package.coins,
+        description: '${package.coins} Pacific Coins',
+        email: user.email,
+        phone: phone,
+      );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Successfully added ${package.coins} Coins! 🎉"),
-          backgroundColor: Colors.green,
+
+      // 2) Fungua ukurasa wa malipo ya PesaPal kwenye WebView.
+      final bool? paid = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => PaymentWebViewScreen(
+            redirectUrl: order.redirectUrl,
+            orderId: order.orderId,
+          ),
         ),
       );
-      Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Failed: $e")),
+
+      if (!mounted) return;
+
+      // 3) Matokeo (coins zinaongezwa na Edge Function, sio app).
+      if (paid == true) {
+        _showSnack(
+          "Payment successful! ${order.coins} coins added 🎉",
+          color: Colors.green,
+        );
+      } else if (paid == false) {
+        _showSnack(
+          "Payment failed. No coins were added.",
+          color: Colors.red,
+        );
+      } else {
+        _showSnack(
+          "Payment not confirmed yet. Coins will be added automatically once "
+          "PesaPal confirms it.",
         );
       }
+    } on PesapalException catch (e) {
+      if (mounted) _showSnack(e.message, color: Colors.red);
+    } catch (e) {
+      if (mounted) _showSnack("Failed: $e", color: Colors.red);
     } finally {
       if (mounted) setState(() => _processingIndex = null);
     }
+  }
+
+  /// Rudisha namba ya simu ya mtumiaji; kama haipo kwenye profile, mwombe.
+  Future<String> _resolvePhoneNumber(String uid) async {
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('phone_number')
+          .eq('uid', uid)
+          .maybeSingle();
+      final String existing = (row?['phone_number'] ?? '').toString().trim();
+      if (existing.isNotEmpty) return existing;
+    } catch (_) {
+      // Kama kusoma profile kumeshindwa, mwombe mtumiaji namba.
+    }
+    if (!mounted) return '';
+    return await _promptForPhone() ?? '';
+  }
+
+  /// Dialog: namba ya simu ya kulipia (PesaPal inaihitaji).
+  Future<String?> _promptForPhone() {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text(
+          "Phone number",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "PesaPal needs your mobile money number to complete this "
+                "payment.",
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: controller,
+                keyboardType: TextInputType.phone,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: "0755123456",
+                  prefixIcon: Icon(Icons.phone_rounded),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  final digits = (value ?? '').replaceAll(RegExp(r'[^\d]'), '');
+                  if (digits.length < 9) {
+                    return "Enter a valid phone number";
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              if (formKey.currentState?.validate() != true) return;
+              Navigator.of(dialogContext).pop(controller.text.trim());
+            },
+            child: const Text("Continue"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnack(String message, {Color? color}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+      ),
+    );
   }
 
   @override
@@ -190,7 +299,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                 Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
                 Text(
-                  "Kiwango: Coin 1 = TSh 100",
+                  "Kiwango: Coin 1 = TSh ${PesapalService.kCoinRateTzs}",
                   style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                 ),
               ],

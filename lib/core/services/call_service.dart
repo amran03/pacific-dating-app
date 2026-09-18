@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -24,6 +26,27 @@ class CallService {
   bool _ringing = false;
 
   bool get isListening => _incomingChannel != null;
+
+  /// Kusubiri channel ipate status ya SUBSCRIBED kabla ya kutuma ujumbe.
+  /// Bila hii, broadcast messages zinazotumwa mara moja baada ya `subscribe()`
+  /// zinaweza kupotea (channel bado haijaunganishwa na server) — ndiyo
+  /// sababu kuu simu za WebRTC hazifikiwi / hazijibu zamani.
+  static Future<bool> ensureSubscribed(
+    RealtimeChannel channel, {
+    Duration timeout = const Duration(seconds: 6),
+  }) {
+    final completer = Completer<bool>();
+    channel.subscribe((status, [Object? error]) {
+      if (completer.isCompleted) return;
+      if (status == RealtimeSubscribeStatus.subscribed) {
+        completer.complete(true);
+      } else if (status == RealtimeSubscribeStatus.channelError ||
+          status == RealtimeSubscribeStatus.timedOut) {
+        completer.complete(false);
+      }
+    });
+    return completer.future.timeout(timeout, onTimeout: () => false);
+  }
 
   /// Anza kusikiliza simu zinazoingia (waitwa mara moja user akiwa logged-in —
   ///ona PresenceTracker).
@@ -69,9 +92,18 @@ class CallService {
     String? callerAvatarUrl,
   }) async {
     final client = Supabase.instance.client;
+    RealtimeChannel? channel;
     try {
-      final channel = client.channel('call:$peerUid');
-      channel.subscribe();
+      channel = client.channel('call:$peerUid');
+      // LAZIMA tuone SUBSCRIBED kabla ya kutuma ring — vinginevyo
+      // ring inaweza kupotea na mwenzake hapokei simu kabisa.
+      final subscribed = await ensureSubscribed(channel);
+      if (!subscribed) {
+        try {
+          await client.removeChannel(channel);
+        } catch (_) {}
+        return false;
+      }
       await channel.sendBroadcastMessage(event: 'ring', payload: {
         'callId': callId,
         'type': callType == CallType.video ? 'video' : 'audio',
@@ -79,9 +111,14 @@ class CallService {
         'callerAvatar': callerAvatarUrl,
         'callerUid': client.auth.currentUser?.id,
       });
+      // Subiri kidogo ili ujumbe ufike kwenye server kabla ya kufunga channel.
+      await Future.delayed(const Duration(milliseconds: 300));
       await client.removeChannel(channel);
       return true;
     } catch (_) {
+      try {
+        if (channel != null) await client.removeChannel(channel);
+      } catch (_) {}
       return false;
     }
   }

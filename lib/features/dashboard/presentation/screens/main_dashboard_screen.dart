@@ -60,25 +60,55 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
           fontSize: 12,
         ),
         unselectedLabelStyle: const TextStyle(fontSize: 11.5),
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.explore_rounded),
             label: "Discover",
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.favorite_rounded),
             label: "Likes",
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_rounded),
+          const BottomNavigationBarItem(
+            icon: _ChatTabIcon(),
             label: "Chat",
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person_rounded),
             label: "Profile",
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Icon ya Chat kwenye BottomNavigationBar yenye badge ya idadi ya
+/// messages zisizosomwa (receiver_id = mimi na seen = false).
+/// Inasikiliza realtime — count inajisasisha yenyewe bila reload.
+class _ChatTabIcon extends StatelessWidget {
+  const _ChatTabIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
+    if (myUid.isEmpty) return const Icon(Icons.chat_bubble_rounded);
+
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Supabase.instance.client
+          .from('messages')
+          .stream(primaryKey: ['id'])
+          .eq('receiver_id', myUid)
+          .eq('seen', false),
+      builder: (context, snapshot) {
+        final unread = snapshot.data?.length ?? 0;
+        const icon = Icon(Icons.chat_bubble_rounded);
+        if (unread <= 0) return icon;
+        return Badge.count(
+          count: unread, // inaonyesha "99+" kiotomatiki kwa nyingi mno
+          child: icon,
+        );
+      },
     );
   }
 }

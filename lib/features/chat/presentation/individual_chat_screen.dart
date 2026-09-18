@@ -16,6 +16,7 @@ import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/chat/presentation/widgets/gift_modal_bottom_sheet.dart';
 import 'package:pacific_dating_app/core/services/presence_service.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
+import 'package:pacific_dating_app/core/services/notification_service.dart';
 import 'package:pacific_dating_app/core/services/user_prefs.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
@@ -104,7 +105,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     // Mark all unread messages from the peer as seen when opening the chat
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Arifa za 'message' kutoka mwenzake huyu hazionyeshwi tunapokuwa
+      // ndani ya chat hii — tunaona ujumbe papo hapo.
+      NotificationService.viewingChatPeerUid = widget.chat.id;
       _markMessagesAsSeen();
+      _markPeerNotificationsAsRead();
       _checkChatLockStatus();
     });
 
@@ -375,6 +380,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       _clearTypingStatus(uid);
     }
 
+    // Tuliwa tena ndani ya chat hii — arifa za mwenzake ziweze kuonekana.
+    if (NotificationService.viewingChatPeerUid == widget.chat.id) {
+      NotificationService.viewingChatPeerUid = null;
+    }
+
     _messageController.removeListener(_onMessageChanged);
     _messageController.dispose();
 
@@ -441,13 +451,21 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
   /// Marks all unread messages sent by the other person as "seen"
   /// when this chat screen is open (WhatsApp-style read receipts).
+  ///
+  /// MUHIMU: hii ni LAZIMA ifanyike kila mara chat inapofunguliwa —
+  /// hata kama mtumiaji amezima "Read Receipts". Sababu: badge ya count
+  /// (icon ya Chat + chat list) inahesabu messages zenye seen=false.
+  /// Tukiruka UPDATE kwa sababu ya privacy switch, count haiondoki kamwe.
+  /// Privacy switch INAHESHIMIWA kwa blue ticks (✔✔ zinazoonekana na
+  /// mwenzake) — tazama [_markAsSeen]/[_flushSeenUpdates] chini.
+  ///
+  /// Kwa hiyo: seen= true inaandikwa DB (badge inatoweka), lakini kama
+  /// read receipts zimezimwa, _markAsSeen (ticks) HAZITUMWI — mwenzake
+  /// haoni kuwa umesoma. Hii ni tofauti kati ya "locally read" na
+  /// "receipt shown to peer".
   Future<void> _markMessagesAsSeen() async {
     final user = currentUser;
     if (user == null || _chatId == null) return;
-
-    // User amezima "Read Receipts" — tusimwonyeshe mwenzake kuwa
-    // ujumbe wake umesomwa (privacy yake inaheshimiwa).
-    if (!UserPrefs.instance.readReceiptsEnabled) return;
 
     try {
       await Supabase.instance.client
@@ -458,8 +476,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           .eq('chat_id', _chatId!)
           .eq('receiver_id', user.id)
           .eq('seen', false);
-    } catch (_) {
-      // Silently fail — read receipts are best-effort
+    } catch (e) {
+      // Best-effort, lakini log kwa ajili ya debugging — hapo awali
+      // ilikuwa kimya kabisa (catch (_) {}) hivyo RLS failures
+      // hazikuonekana.
+      debugPrint('Pacific: mark-seen failed: $e');
     }
   }
 
@@ -708,6 +729,30 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
             'last_message': previewText,
             'last_message_at': DateTime.now().toIso8601String(),
           });
+
+      // NOTIFICATION — mfumo wa arifa: mwenzake anapata arifa halisi ya
+      // system kwenye kifaa chake (NotificationService inasikiliza table
+      // ya notifications kwa realtime na kuionyesha). Ukiguswa, arifa
+      // inampeleka moja kwa moja kwenye chat hii (deep-link).
+      try {
+        final myName = await _fetchMyDisplayName();
+        await Supabase.instance.client.from('notifications').insert({
+          'to_uid': widget.chat.id,
+          'from_uid': user.id,
+          'from_name': myName,
+          'type': 'message',
+          'title': myName.isNotEmpty ? '$myName 💬' : 'New message 💬',
+          'description':
+              previewText.isNotEmpty ? previewText : 'Sent you a message',
+          'read': false,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      } catch (e) {
+        // Arifa ni best-effort — usivuruge kutuma ujumbe, lakini log
+        // ili RLS failures zionekane kwenye console (hapo awali ilikuwa
+        // kimya kabisa na tatizo halikuonekana).
+        debugPrint('Pacific: notification insert failed: $e');
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -723,13 +768,49 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   }
 
   // ============================================================
-  // READ RECEIPT — messages from the peer are marked as seen
-  // the moment they appear on screen (only if not already
-  // marked). Batches writes via Firestore writeBatch.
+  // NOTIFICATION CLEAR — ukifungua chat, arifa zote za 'message' za
+  // mwenzake huyo zinawekwa alama read NA zinafutwa kutoka notification
+  // tray (hivyo count kwenye icon ya messages na alama za "ujumbe mpya"
+  // hupungua/kutoweka papo hapo).
+  // ============================================================
+
+  /// Jina la mtumiaji wa sasa (cached) — linatumika kwenye arifa ya
+  /// ujumbe mpya ("Amina 💬"). Linatafutwa mara moja tu kwa session.
+  String? _myDisplayName;
+
+  Future<String> _fetchMyDisplayName() async {
+    if (_myDisplayName != null) return _myDisplayName!;
+    try {
+      final row = await Supabase.instance.client
+          .from('users')
+          .select('name')
+          .eq('uid', currentUser!.id)
+          .maybeSingle();
+      _myDisplayName = row?['name']?.toString() ?? '';
+    } catch (_) {
+      _myDisplayName = '';
+    }
+    return _myDisplayName!;
+  }
+
+  void _markPeerNotificationsAsRead() {
+    unawaited(
+      NotificationService.instance.clearMessageNotificationsFor(
+        widget.chat.id,
+      ),
+    );
+  }
+
+  // ============================================================
+  // READ RECEIPT (blue ticks ✔✔) — ujumbe wa mwenzake unawekwa alama
+  // seen unapoonekana screen (kama bado haujawekwa). Hii ndiyo inayomwonyesha
+  // MWENZAKE kuwa umesoma — kwa hiyo INAHESHIMU privacy switch ya
+  // "Read Receipts": ukizima, ticks hazitumwi (lakini badge yako mwenyewe
+  // bado inatoweka kupitia _markMessagesAsSeen, tazama juu).
   // ============================================================
 
   /// Pending seen updates collected during a single build cycle;
-  /// flushed once per frame to avoid hammering Firestore.
+  /// flushed once per frame to avoid hammering Supabase.
   final List<String> _pendingSeenIds = [];
 
   void _markAsSeen(
@@ -739,6 +820,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   ) {
     final user = currentUser;
     if (user == null) return;
+
+    // Mtumiaji amezima "Read Receipts" — usimtumie mwenzake receipt
+    // (blue ticks). Badge yake mwenyewe bado inatoweka kupitia
+    // _markMessagesAsSeen — privacy hapa, si count.
+    if (!UserPrefs.instance.readReceiptsEnabled) return;
 
     // Only mark peer's messages (not my own).
     if (rawData['sender_id'] == user.id) return;

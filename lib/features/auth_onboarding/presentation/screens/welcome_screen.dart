@@ -325,7 +325,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           );
                         },
                         child: const Text(
-                          "Pacific Dating",
+                          "Pacific",
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 36,

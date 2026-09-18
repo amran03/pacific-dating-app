@@ -1,0 +1,23 @@
+# Supabase CLI config — Pacific Dating App
+#
+# Ipo hapa ili `supabase functions deploy` (zote kwa mkupuo) kujue functions
+# zipi zisihitaji JWT ya mtumiaji. Kama una config.toml yako tayari, nakili
+# sehemu za [functions.*] ndani yake badala ya kufuta faili yako.
+
+project_id = "pacific_dating_app"
+
+[functions.create-pesapal-order]
+# Inahitaji JWT ya mtumiaji (Flutter inaita kwa supabase.functions.invoke).
+verify_jwt = true
+
+[functions.register-pesapal-ipn]
+# Hupigwa kwa mkono MARA MOJA tu; inalindwa na x-admin-secret / service-role.
+verify_jwt = false
+
+[functions.pesapal-ipn]
+# Webhook ya PesaPal — haina JWT ya mtumiaji.
+verify_jwt = false
+
+[functions.pesapal-return]
+# callback_url inafunguliwa kwenye WebView ya mtumiaji (au browser) — haina JWT.
+verify_jwt = false

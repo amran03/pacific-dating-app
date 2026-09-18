@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_color.dart';
 import '../../../core/services/matchmaking_service.dart';
 import '../../../core/services/core_error_service.dart';
@@ -17,6 +19,58 @@ class ChatListScreen extends StatefulWidget {
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final MatchmakingService _matchmakingService = MatchmakingService();
+
+  // ---- UNREAD COUNTS (per chat) ----
+  // Inasikiliza messages zote zisizosomwa (receiver = mimi, seen = false)
+  // realtime, kisha inahesabu kwa kila chat_id ili badge ioneshwe kwenye
+  // kila mazungumzo na jumla kwenye icon ya Chat.
+  StreamSubscription<List<Map<String, dynamic>>>? _unreadSub;
+  Map<String, int> _unreadByChatId = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _listenUnreadCounts();
+  }
+
+  void _listenUnreadCounts() {
+    final myUid = Supabase.instance.client.auth.currentUser?.id;
+    if (myUid == null || myUid.isEmpty) return;
+
+    _unreadSub = Supabase.instance.client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('receiver_id', myUid)
+        .eq('seen', false)
+        .listen((rows) {
+      if (!mounted) return;
+      final Map<String, int> counts = {};
+      for (final row in rows) {
+        final chatId = row['chat_id']?.toString() ?? '';
+        if (chatId.isEmpty) continue;
+        counts[chatId] = (counts[chatId] ?? 0) + 1;
+      }
+      setState(() => _unreadByChatId = counts);
+    }, onError: (e) {
+      debugPrint('Unread stream error: $e');
+    });
+  }
+
+  /// Chat ID kati ya mimi na [otherUid] — lazima iendane na inayotengenezwa
+  /// IndividualChatScreen (uids zimepangwa kisha zimeunganwa na '_').
+  String _chatIdFor(String otherUid) {
+    final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
+    return ([myUid, otherUid]..sort()).join('_');
+  }
+
+  int _unreadFor(ChatModel chat) =>
+      _unreadByChatId[_chatIdFor(chat.id)] ?? 0;
+
+  @override
+  void dispose() {
+    _unreadSub?.cancel();
+    super.dispose();
+  }
 
   /// Moja ya logic ya kufungua chat (inatumika na list, matches na
   /// missed calls): locked -> dialog ya coins, wazi -> moja to moja.
@@ -344,6 +398,22 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                                   child: const Icon(Icons.lock_rounded, size: 12, color: Colors.white),
                                                 ),
                                               ),
+                                            // UNREAD BADGE — idadi ya messages
+                                            // zisizosomwa za chat hii.
+                                            if (_unreadFor(chat) > 0)
+                                              Positioned(
+                                                right: -2,
+                                                top: -2,
+                                                child: Badge.count(
+                                                  count: _unreadFor(chat),
+                                                  backgroundColor: Colors.redAccent,
+                                                  largeSize: 14,
+                                                  textStyle: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ),
                                           ],
                                         ),
                                         const SizedBox(height: 6),
@@ -455,16 +525,31 @@ class _ChatListScreenState extends State<ChatListScreen> {
                                         ),
                                       ),
                                     ),
-                                    trailing: chat.isLocked
-                                        ? Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.coinGold.withValues(alpha: 0.15),
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: const Icon(Icons.lock_outline_rounded, color: AppColors.coinGold, size: 20),
-                                    )
-                                        : const Icon(Icons.arrow_forward_ios_rounded, color: Colors.black38, size: 16),
+                                    trailing: _unreadFor(chat) > 0
+                                        ? Badge.count(
+                                            count: _unreadFor(chat),
+                                            backgroundColor: Colors.redAccent,
+                                            largeSize: 18,
+                                            textStyle: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                            child: const Icon(
+                                              Icons.arrow_forward_ios_rounded,
+                                              color: Colors.black38,
+                                              size: 16,
+                                            ),
+                                          )
+                                        : (chat.isLocked
+                                            ? Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.coinGold.withValues(alpha: 0.15),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(Icons.lock_outline_rounded, color: AppColors.coinGold, size: 20),
+                                              )
+                                            : const Icon(Icons.arrow_forward_ios_rounded, color: Colors.black38, size: 16)),
                                     onTap: () {
                                       if (chat.isLocked) {
                                         _showUnlockDialog(chat);

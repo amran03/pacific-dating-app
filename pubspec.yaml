@@ -37,6 +37,7 @@ dependencies:
 
   # Real audio/video calls (WebRTC)
   flutter_webrtc: ^0.12.4
+  webview_flutter: ^4.14.1
 
 dev_dependencies:
   flutter_test:

@@ -1,12 +1,17 @@
 import 'dart:async';
+import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants/app_color.dart';
 import '../../../core/services/call_service.dart';
+import '../../../core/services/user_prefs.dart';
 
 enum CallType { audio, video }
 
@@ -96,7 +101,14 @@ class _CallScreenState extends State<CallScreen>
   bool _localVideoReady = false;
   bool _accepted = false; // callee: mtumiaji amebonyeza Accept
   bool _tornDown = false;
+  bool _offerSent = false; // caller: offer imetumwa mara moja tu
   String _callerName = 'Pacific user'; // jina la caller (kwa missed-call log)
+
+  // ---- RING ALERTS (incoming call) ----
+  // Ringtone inayotengenezwa kwa code (hakuna asset) + vibration loop.
+  final AudioPlayer _ringPlayer = AudioPlayer();
+  Uint8List? _ringWav;
+  Timer? _vibrateTimer;
 
   bool get _isVideo => widget.callType == CallType.video;
 
@@ -131,6 +143,9 @@ class _CallScreenState extends State<CallScreen>
 
     if (widget.isOutgoing) {
       _startOutgoingCall();
+    } else {
+      // Simu inayoingia: ita ringtone + vibration hadi accept/decline.
+      _startRingAlerts();
     }
   }
 
@@ -203,14 +218,33 @@ class _CallScreenState extends State<CallScreen>
     if (_accepted || _phase == CallPhase.ended) return;
     _accepted = true;
 
+    // Simu imejibiwa — simama ringtone na vibration.
+    _stopRingAlerts();
+
     final ok = await _prepareMediaAndPeer();
     if (!ok || !mounted) return;
 
     // Jiunge na channel KABLA ya kutuma accept ili offer isipotee.
     await _joinCallChannel();
-    _signal('accept');
+    if (!mounted || _phase == CallPhase.ended) return;
+    if (_channel == null) {
+      // Channel haikuweza ku-subscribe — call inaweza isifanye kazi.
+      await _finishCall(sendEnd: false);
+      return;
+    }
 
+    await _signal('accept');
     setState(() => _phase = CallPhase.connecting);
+
+    // Retry accept mara 2 kwa 800ms — kama caller haja-subscribe bado
+    // au paketi moja imepotea, aipate nyingine.
+    for (int i = 0; i < 2; i++) {
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (!mounted || _phase == CallPhase.ongoing || _phase == CallPhase.ended) {
+        break;
+      }
+      await _signal('accept');
+    }
 
     // Kama offer haifiki ndani ya sekunde 20 — call inaisha.
     _noAnswerTimer = Timer(const Duration(seconds: 20), () {
@@ -221,6 +255,8 @@ class _CallScreenState extends State<CallScreen>
   }
 
   Future<void> _decline() async {
+    // Simama ringtone na vibration.
+    _stopRingAlerts();
     // Jiunge to haraka tu kutuma decline kisha toka.
     if (_channel == null) await _joinCallChannel();
     await _signal('decline');
@@ -253,15 +289,20 @@ class _CallScreenState extends State<CallScreen>
   Future<void> _joinCallChannel() async {
     if (_channel != null) return;
     final client = Supabase.instance.client;
-    _channel = client
+    final channel = client
         .channel('call:${widget.callId}')
         .onBroadcast(event: 'accept', callback: (_) => _onPeerAccepted())
         .onBroadcast(event: 'offer', callback: _onOffer)
         .onBroadcast(event: 'answer', callback: _onAnswer)
         .onBroadcast(event: 'ice', callback: _onIce)
         .onBroadcast(event: 'decline', callback: (_) => _onPeerDeclined())
-        .onBroadcast(event: 'end', callback: (_) => _onPeerEnded())
-        .subscribe();
+        .onBroadcast(event: 'end', callback: (_) => _onPeerEnded());
+
+    // Subiri status ya SUBSCRIBED — bila hii offer/answer/ice zinaweza
+    // kutumwa kabla channel haijaunganishwa na kupotea.
+    final ok = await CallService.ensureSubscribed(channel);
+    if (!ok) return;
+    _channel = channel;
   }
 
   Future<void> _signal(String event, [Map<String, dynamic>? payload]) async {
@@ -275,8 +316,11 @@ class _CallScreenState extends State<CallScreen>
   // Caller: mwenzake amebonyeza Accept — tuma WebRTC offer.
   Future<void> _onPeerAccepted() async {
     final pc = _pc;
-    if (pc == null || _phase == CallPhase.ongoing) return;
+    if (pc == null || _offerSent || _phase == CallPhase.ended) return;
+    // Guard dhidi ya duplicate 'accept' retries — tuma offer mara moja tu.
+    if (_phase == CallPhase.connecting) return;
     _noAnswerTimer?.cancel();
+    _offerSent = true;
     if (mounted) setState(() => _phase = CallPhase.connecting);
 
     final offer = await pc.createOffer({'offerToReceiveVideo': _isVideo});
@@ -362,6 +406,12 @@ class _CallScreenState extends State<CallScreen>
       _localRenderer.srcObject = _localStream;
       _localVideoReady = _localStream!.getVideoTracks().isNotEmpty;
 
+      // Audio routing default: video call -> speaker loud; audio call ->
+      // earpiece (kama simu ya kawaida). Mtumiaji anaweza kubadilisha
+      // kwenye kitufe cha "Speaker".
+      _isSpeakerOn = _isVideo;
+      await Helper.setSpeakerphoneOn(_isSpeakerOn);
+
       // 3. Peer connection
       _pc = await createPeerConnection(_peerConfig);
 
@@ -387,6 +437,16 @@ class _CallScreenState extends State<CallScreen>
         } else if (state ==
             RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
           _finishCall(sendEnd: true);
+        }
+      };
+      // Fallback: baadhi ya platforms onConnectionState haifanyi kazi
+      // kikamilifu — ICE connected/completed pia inamaanisha call iko
+      // "ongoing" na wawili wanaweza kuongea.
+      _pc!.onIceConnectionState = (state) {
+        if (state ==
+                RTCIceConnectionState.RTCIceConnectionStateConnected ||
+            state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          _goOngoing();
         }
       };
 
@@ -429,6 +489,7 @@ class _CallScreenState extends State<CallScreen>
   Future<void> _finishCall({required bool sendEnd}) async {
     _noAnswerTimer?.cancel();
     _durationTimer?.cancel();
+    _stopRingAlerts();
     if (sendEnd) await _signal('end');
     await _teardownWebRTC();
     if (!mounted || _phase == CallPhase.ended) return;
@@ -489,10 +550,105 @@ class _CallScreenState extends State<CallScreen>
   void dispose() {
     _noAnswerTimer?.cancel();
     _durationTimer?.cancel();
+    _stopRingAlerts();
+    _ringPlayer.dispose();
     _pulseController.dispose();
     _dotsController.dispose();
     _teardownWebRTC();
     super.dispose();
+  }
+
+  // ============================================================
+  // RING ALERTS — ringtone (inayotengenezwa kwa code, hakuna asset)
+  // + vibration loop kwa simu zinazoingia. Inaheshimu mapendeleo ya
+  // mtumiaji (sound/vibration) kutoka UserPrefs.
+  // ============================================================
+
+  void _startRingAlerts() {
+    _stopRingAlerts();
+
+    if (UserPrefs.instance.vibrationEnabled) {
+      HapticFeedback.vibrate();
+      _vibrateTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+        HapticFeedback.vibrate();
+      });
+    }
+
+    if (UserPrefs.instance.soundEnabled) {
+      _playSynthRingtone();
+    }
+  }
+
+  void _stopRingAlerts() {
+    _vibrateTimer?.cancel();
+    _vibrateTimer = null;
+    try {
+      _ringPlayer.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _playSynthRingtone() async {
+    try {
+      _ringWav ??= _buildRingtoneWav();
+      await _ringPlayer.setReleaseMode(ReleaseMode.loop);
+      await _ringPlayer.play(BytesSource(_ringWav!));
+    } catch (_) {}
+  }
+
+  /// Inatengeneza WAV (mono, 8kHz, 16-bit) yenye classic two-tone ring:
+  /// 400ms @ 850Hz + 200ms kimya + 400ms @ 1050Hz + 400ms kimya (x2 = 2.8s).
+  static Uint8List _buildRingtoneWav() {
+    const sampleRate = 8000;
+    const toneMs = 400;
+    const gap1Ms = 200;
+    const gap2Ms = 400;
+    const cycles = 2;
+    const cycleMs = toneMs + gap1Ms + toneMs + gap2Ms; // 1400ms
+    final totalSamples = sampleRate * cycleMs * cycles ~/ 1000;
+
+    final samples = Int16List(totalSamples);
+    for (int i = 0; i < totalSamples; i++) {
+      final inCycleMs = (i * 1000 ~/ sampleRate) % cycleMs;
+      double freq = 0;
+      if (inCycleMs < toneMs) {
+        freq = 850;
+      } else if (inCycleMs >= toneMs + gap1Ms &&
+          inCycleMs < toneMs + gap1Ms + toneMs) {
+        freq = 1050;
+      }
+      if (freq > 0) {
+        // Fade ndogo mwanzo/mwisho wa tone ili kupunguza "click" sauti.
+        final t = i / sampleRate;
+        final value = sin(2 * pi * freq * t) * 11000;
+        samples[i] = value.round().clamp(-32768, 32767);
+      }
+    }
+
+    final dataLen = totalSamples * 2;
+    final buffer = ByteData(44 + dataLen);
+    void writeStr(int offset, String s) {
+      for (int i = 0; i < s.length; i++) {
+        buffer.setUint8(offset + i, s.codeUnitAt(i));
+      }
+    }
+
+    writeStr(0, 'RIFF');
+    buffer.setUint32(4, 36 + dataLen, Endian.little);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    buffer.setUint32(16, 16, Endian.little); // fmt chunk size
+    buffer.setUint16(20, 1, Endian.little); // PCM
+    buffer.setUint16(22, 1, Endian.little); // mono
+    buffer.setUint32(24, sampleRate, Endian.little);
+    buffer.setUint32(28, sampleRate * 2, Endian.little); // byte rate
+    buffer.setUint16(32, 2, Endian.little); // block align
+    buffer.setUint16(34, 16, Endian.little); // bits per sample
+    writeStr(36, 'data');
+    buffer.setUint32(40, dataLen, Endian.little);
+    for (int i = 0; i < totalSamples; i++) {
+      buffer.setInt16(44 + i * 2, samples[i], Endian.little);
+    }
+    return buffer.buffer.asUint8List();
   }
 
   // ============================================================
