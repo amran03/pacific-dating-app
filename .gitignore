@@ -70,3 +70,21 @@ patch_notif4.py
 
 # Supabase CLI temp/state files
 supabase/.temp/
+
+# Release signing secrets & keystore (USIWEKE kwenye git kamwe)
+/android/key.properties
+/android/app/upload-keystore.jks
+/android/app/*.jks
+/android/app/*.keystore
+*.jks
+*.keystore
+
+# Local release build helpers / logs
+build_release_log.txt
+make_keystore.bat
+verify_keystore.bat
+test_log.txt
+verify_apk.bat
+verify_apk_out.txt
+keystore_list.txt
+

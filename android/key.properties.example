@@ -1,0 +1,17 @@
+# Nakili faili hili kwenda android/key.properties kisha weka thamani zako halisi.
+#
+#     cp android/key.properties.example android/key.properties
+#
+# TENGENEZA KEYSTORE YAKO MWENYEWE (usitumie hii ya mfano):
+#
+#     keytool -genkeypair -v -keystore android/app/upload-keystore.jks ^
+#       -storetype PKCS12 -keyalg RSA -keysize 2048 -validity 10000 ^
+#       -alias upload
+#
+# KUMBUKA: android/key.properties na *.jks HAZIWEKWI kwenye git (tazama .gitignore).
+# Ihifadhi mahali salama - ukiiPoteza hutaweza kutolea update kwenye Play Store.
+
+storePassword=<weka store password yako>
+keyPassword=<weka key password yako>
+keyAlias=upload
+storeFile=upload-keystore.jks
