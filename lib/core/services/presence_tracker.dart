@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
+import 'package:pacific_dating_app/features/chat/presentation/call_screen.dart';
+import 'package:pacific_dating_app/features/chat/presentation/individual_chat_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'call_service.dart';
 import 'notification_service.dart';
 import 'presence_service.dart';
+import 'push_service.dart';
 import 'supabase_service.dart';
 import 'user_prefs.dart';
+import 'zego_call_service.dart';
 
 /// Presence + listeners tracker (chini ya MaterialApp).
 ///
@@ -28,12 +35,19 @@ class PresenceTracker extends StatefulWidget {
 class _PresenceTrackerState extends State<PresenceTracker> {
   String? _activeUid;
   int _retryCount = 0;
+  Timer? _routeConsumer;
 
   @override
   void initState() {
     super.initState();
     // Jaribu baada ya frame ya kwanza — auth session huwa tayari hapo.
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncListeners());
+  }
+
+  @override
+  void dispose() {
+    _stopRouteConsumer();
+    super.dispose();
   }
 
   /// Hii inaitwa kila auth state inabadilika (kupitia didChangeDependencies
@@ -56,10 +70,13 @@ class _PresenceTrackerState extends State<PresenceTracker> {
         // Tulikuwa na user — sasa hamna: logout.
         _activeUid = null;
         _retryCount = 0;
+        _stopRouteConsumer();
         UserPrefs.instance.clear();
         PresenceService.stop();
         NotificationService.instance.stopListening();
         CallService.instance.stopListening();
+        // ZEGO: dhisha call invitation service kwenye logout.
+        unawaited(ZegoCallService.instance.uninit());
       } else {
         _scheduleRetry();
       }
@@ -70,13 +87,89 @@ class _PresenceTrackerState extends State<PresenceTracker> {
     _activeUid = uid;
     _retryCount = 0;
 
-    // Mapendeleo ya mtumiaji yanasomwa MARA MOJA.
+    // User preferences are loaded once.
     UserPrefs.instance.load(uid);
     PresenceService.start();
-    // Real-time system notifications + incoming calls kwa user huyu.
-    // Hizi zina retry yake ndani pia (uid tayari tunayo hapa).
+    // Realtime system notifications + incoming calls for this user
+    // (each has its own internal retry; uid is already known here).
     NotificationService.instance.startListening();
     CallService.instance.startListening();
+    // FCM token registration for background/killed push delivery
+    // (no-op when Firebase is not configured — see PushService).
+    PushService.registerAfterLogin(uid);
+    // ZEGO call invitations: anza mara tu login ya Supabase
+    // imethibitika (userID = Supabase uid iliyosafishwa).
+    unawaited(ZegoCallService.instance.init(uid));
+    // Notification-tap navigation: anza kuchukua stash za arifa
+    // (chat/call deep-link) mara mtumiaji ameingia.
+    _startRouteConsumer();
+  }
+
+  // ============================================================
+  // NOTIFICATION TAP → NAVIGATION (flutter_local_notifications).
+  // ============================================================
+  // NotificationService.hifadhi payload ("stash") wakati mtumiaji
+  // anagusa arifa — wakati huo navigator haipo bado (cold-start) au
+  // ukurasa mwingine uko juu. Hakuna consumer lilipofungua hii;
+  // hapa tunachukua stash na kufungua IndividualChatScreen / CallScreen.
+  //
+  // Mzunguko huu unaanza baada ya login na kusimama kwenye logout.
+  void _startRouteConsumer() {
+    _routeConsumer ??= Timer.periodic(
+      const Duration(milliseconds: 600),
+      (_) => _consumePendingRoutes(),
+    );
+  }
+
+  void _stopRouteConsumer() {
+    _routeConsumer?.cancel();
+    _routeConsumer = null;
+  }
+
+  void _consumePendingRoutes() {
+    if (!mounted || _activeUid == null) return;
+    final nav = CallService.instance.navigatorKey.currentState;
+    if (nav == null) return;
+
+    // 1) Chat arifa iliyoguswa → fungua conversation. Ikiwa chat hiyo
+    //    tayari iko wazi (viewingChatPeerUid), bado tunachukua stash
+    //    ili isifungue tena wakati mwingine.
+    final chat = NotificationService.consumePendingChatLaunch();
+    if (chat != null) {
+      final alreadyViewing =
+          NotificationService.viewingChatPeerUid == chat.uid;
+      if (!alreadyViewing) {
+        nav.push(
+          MaterialPageRoute(
+            builder: (_) => IndividualChatScreen(
+              chat: ChatModel(
+                id: chat.uid,
+                name: chat.name,
+                avatarUrl: chat.avatarUrl,
+                lastMessage: '',
+                timeSent: '',
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    // 2) Simu iliyoiningia (tap ya Answer / body ya arifa) → CallScreen
+    //    MARA MOJA. `CallScreen.isActive` huzuia CallScreen ya pili
+    //    ikiwa moja tayari iko wazi (mf. ring ya realtime ilifungua
+    //    moja kwa moja; au Answer iliguswa mara mbili haraka).
+    final call = NotificationService.consumePendingIncomingCall();
+    if (call != null && !CallScreen.isActive) {
+      CallScreen.push(
+        nav.context,
+        callType: call.isVideo ? CallType.video : CallType.audio,
+        peerName: call.name,
+        peerUid: call.uid,
+        callId: call.callId,
+        isOutgoing: false,
+      );
+    }
   }
 
   void _scheduleRetry() {
@@ -109,6 +202,7 @@ class _PresenceTrackerState extends State<PresenceTracker> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (!mounted) return;
               _activeUid = null;
+              _stopRouteConsumer();
               UserPrefs.instance.clear();
               PresenceService.stop();
               NotificationService.instance.stopListening();

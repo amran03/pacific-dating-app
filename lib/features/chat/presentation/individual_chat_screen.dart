@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -14,15 +15,24 @@ import 'package:pacific_dating_app/core/services/storage_service.dart';
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/chat/presentation/widgets/gift_modal_bottom_sheet.dart';
+import 'package:pacific_dating_app/features/chat/presentation/widgets/voice_note_bubble.dart';
 import 'package:pacific_dating_app/core/services/presence_service.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/core/services/notification_service.dart';
+import 'package:pacific_dating_app/core/services/push_sender.dart';
 import 'package:pacific_dating_app/core/services/user_prefs.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/localization/app_language.dart';
+// ZEGO 1-on-1 voice & video call invitations.
+// zego_uikit (ZegoUIKitUser, ButtonIcon) haiko tena kwenye export ya
+// prebuilt_call 4.17+ — import moja kwa moja.
+import 'package:zego_uikit/zego_uikit.dart';
+import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
+import 'package:pacific_dating_app/core/services/zego_call_service.dart';
 
-import 'call_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class IndividualChatScreen extends StatefulWidget {
   final ChatModel chat;
@@ -53,6 +63,26 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
   String? _chatId;
 
+  // ---- CACHED STREAMS (background refresh without full-page rebuild) ----
+  // Supabase `.stream()` creates a NEW subscription every time it is called.
+  // The old code built these inline inside build()/StreamBuilders, so EVERY
+  // setState (typing, presence heartbeat, seen-write) recreated the streams,
+  // re-fired `ConnectionState.waiting` and rebuilt the WHOLE Scaffold
+  // (AppBar blur + list + input bar all flickered). By creating each stream
+  // ONCE in initState and reusing the same instance, only the small
+  // StreamBuilder that listens to it rebuilds — the rest of the page stays
+  // put and new messages slide in via the background list update.
+  Stream<List<Map<String, dynamic>>>? _messagesStream;
+  Stream<List<Map<String, dynamic>>>? _typingRoomStream;
+  Stream<Map<String, dynamic>?>? _presenceStream;
+
+  // Seen-receipt bookkeeping that must NEVER setState during build.
+  bool _seenFrameScheduled = false;
+  int _renderedMessageCount = 0;
+
+  // Newest message is at offset 0 (ListView reverse:true).
+  final ScrollController _scrollController = ScrollController();
+
   bool _isRecording = false;
 
   // ValueNotifier badala ya setState — inapunguza rebuilds za ukurasa mzima
@@ -75,8 +105,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   Timer? _typingClearTimer;
   DateTime? _lastTypingWrite;
 
-  // ---- Smooth chat: entrance animation bookkeeping ----
-  int _lastMessageCount = 0;
+  // ---- Smooth chat: entrance animation bookkeeping (post-frame only) ----
 
   // ---- Recording pulse animation ----
   late final AnimationController _recordingPulse;
@@ -99,6 +128,24 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     if (user != null) {
       final ids = [user.id, widget.chat.id]..sort();
       _chatId = ids.join('_');
+    }
+
+    // Build every realtime stream ONCE so later setStates (typing box,
+    // recording flag, lock check) reuse the same subscription and only the
+    // tiny StreamBuilder listening to it rebuilds.
+    if (_chatId != null && user != null) {
+      final client = Supabase.instance.client;
+      _messagesStream ??= client
+          .from('messages')
+          .stream(primaryKey: ['id'])
+          .eq('chat_id', _chatId!)
+          .order('created_at', ascending: false);
+      _typingRoomStream ??= client
+          .from('chat_rooms')
+          .stream(primaryKey: ['id'])
+          .eq('id', _chatId!);
+      _presenceStream ??=
+          PresenceService.streamPeerPresence(widget.chat.id);
     }
 
     _messageController.addListener(_onMessageChanged);
@@ -191,8 +238,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   /// Overlay ya lock — inaonekana juu ya chat kama bado haijalipwa.
   /// Ina kitufe cha kulipia to coins; ikilipwa inatoweka kabisa.
   Widget _buildChatLockOverlay(bool isLuxury, Color accentColor) {
-    final Color fg = isLuxury ? Colors.white : Colors.black87;
-    final Color subFg = isLuxury ? Colors.white70 : Colors.black54;
+    // FIXED palette: classic light overlay for everyone (flag/params kept
+    // only so call-sites don't churn; they are intentionally unused).
+    const Color fg = Colors.black87;
+    const Color subFg = Colors.black54;
 
     return Center(
       child: SingleChildScrollView(
@@ -215,7 +264,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               ),
               child: const Icon(
                 Icons.lock_rounded,
-                color: AppColors.coinGold,
+                color: AppColors.coinGoldDark,
                 size: 46,
               ),
             ),
@@ -231,8 +280,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
             ),
             const SizedBox(height: 10),
             Text(
-              '${widget.chat.name} ameweka bei ya kufungua mazungumzo haya. '
-              'Lipa MARA MOJA tu — chat inabaki wazi milele!',
+              '${widget.chat.name} charges a one-time fee to unlock this conversation. '
+                  'Pay ONCE — the chat stays open forever!',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, height: 1.4, color: subFg),
             ),
@@ -247,14 +296,14 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.coinGold.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: AppRadius.card,
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
                       Icons.monetization_on_rounded,
-                      color: AppColors.coinGold,
+                      color: AppColors.coinGoldDark,
                       size: 20,
                     ),
                     const SizedBox(width: 8),
@@ -279,7 +328,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                     elevation: 0,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: AppRadius.md,
                     ),
                   ),
                   child: Text(
@@ -341,8 +390,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       Supabase.instance.client
           .from('chat_rooms')
           .update({
-            'typing': uid,
-          })
+        'typing': uid,
+      })
           .eq('id', chatId)
           .catchError((_) {});
     }
@@ -357,12 +406,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   void _clearTypingStatus(String uid) {
     final chatId = _chatId;
     if (chatId == null) return;
-    
+
     Supabase.instance.client
         .from('chat_rooms')
         .update({
-          'typing': null,
-        })
+      'typing': null,
+    })
         .eq('id', chatId)
         .catchError((_) {});
   }
@@ -388,6 +437,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     _messageController.removeListener(_onMessageChanged);
     _messageController.dispose();
 
+    _scrollController.dispose();
+
     _audioRecorder.dispose();
     _audioPlayer.dispose();
 
@@ -402,25 +453,22 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // HELPERS
   // ============================================================
 
+  void _scrollToBottom() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
   void _showMessage(
       String message, {
         Color? backgroundColor,
       }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: backgroundColor,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      );
+    showAppNotification(context, message, color: backgroundColor);
   }
 
   bool _isValidUrl(String? url) {
@@ -431,14 +479,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     return value.isNotEmpty &&
         (value.startsWith('http://') ||
             value.startsWith('https://'));
-  }
-
-  String _safeTier(dynamic value) {
-    if (value is String && value.trim().isNotEmpty) {
-      return value.toLowerCase().trim();
-    }
-
-    return 'none';
   }
 
   // ============================================================
@@ -471,16 +511,28 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       await Supabase.instance.client
           .from('messages')
           .update({
-            'seen': true,
-          })
+        'seen': true,
+        // Tarehe kamili ya kusoma — kwa ajili ya historia + kuthibitisha
+        // kuwa badge ya unread inapungua pale UJUMBE unaposomwa, sio
+        // pale orodha ya messages inapofunguliwa.
+        'seen_at': DateTime.now().toIso8601String(),
+      })
           .eq('chat_id', _chatId!)
           .eq('receiver_id', user.id)
           .eq('seen', false);
     } catch (e) {
-      // Best-effort, lakini log kwa ajili ya debugging — hapo awali
-      // ilikuwa kimya kabisa (catch (_) {}) hivyo RLS failures
-      // hazikuonekana.
-      debugPrint('Pacific: mark-seen failed: $e');
+      // FALLBACK (DB za zamani bila column ya seen_at): seen bado
+      // LAZIMA iandikwe — vinginevyo badge ya unread haiondoki kamwe.
+      try {
+        await Supabase.instance.client
+            .from('messages')
+            .update({'seen': true})
+            .eq('chat_id', _chatId!)
+            .eq('receiver_id', user.id)
+            .eq('seen', false);
+      } catch (e2) {
+        debugPrint('Pacific: mark-seen failed: $e2');
+      }
     }
   }
 
@@ -724,11 +776,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       await Supabase.instance.client
           .from('chat_rooms')
           .upsert({
-            'id': chatId,
-            'participants': participantIds,
-            'last_message': previewText,
-            'last_message_at': DateTime.now().toIso8601String(),
-          });
+        'id': chatId,
+        'participants': participantIds,
+        'last_message': previewText,
+        'last_message_at': DateTime.now().toIso8601String(),
+      });
 
       // NOTIFICATION — mfumo wa arifa: mwenzake anapata arifa halisi ya
       // system kwenye kifaa chake (NotificationService inasikiliza table
@@ -736,17 +788,29 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       // inampeleka moja kwa moja kwenye chat hii (deep-link).
       try {
         final myName = await _fetchMyDisplayName();
+        final title = myName.isNotEmpty ? '$myName 💬' : 'New message 💬';
+        final desc =
+        previewText.isNotEmpty ? previewText : 'Sent you a message';
         await Supabase.instance.client.from('notifications').insert({
           'to_uid': widget.chat.id,
           'from_uid': user.id,
           'from_name': myName,
           'type': 'message',
-          'title': myName.isNotEmpty ? '$myName 💬' : 'New message 💬',
-          'description':
-              previewText.isNotEmpty ? previewText : 'Sent you a message',
+          'title': title,
+          'description': desc,
           'read': false,
           'created_at': DateTime.now().toIso8601String(),
         });
+        // FCM push so the peer is reached even when backgrounded/killed.
+        // Best-effort — the realtime path above already covers foreground.
+        unawaited(PushSender.send(
+          toUid: widget.chat.id,
+          type: 'message',
+          title: title,
+          body: desc,
+          fromUid: user.id,
+          fromName: myName,
+        ));
       } catch (e) {
         // Arifa ni best-effort — usivuruge kutuma ujumbe, lakini log
         // ili RLS failures zionekane kwenye console (hapo awali ilikuwa
@@ -793,6 +857,50 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     return _myDisplayName!;
   }
 
+  /// ============================================================
+  /// ZEGO CALL PERMISSIONS — omba camera/mic kabla ya kupiga simu.
+  /// ============================================================
+  /// Rudisha `true` tu zote zimeruhusiwa; vinginevyo onyesha ujumbe
+  /// wazi mtumiaji akikataa na usitume invitation.
+  Future<bool> _ensureCallPermissions({required bool isVideo}) async {
+    final statuses = await <Permission>[
+      Permission.microphone,
+      if (isVideo) Permission.camera,
+    ].request();
+
+    if (!mounted) return false;
+
+    final micOk = statuses[Permission.microphone]?.isGranted ?? false;
+    final camOk = !isVideo || (statuses[Permission.camera]?.isGranted ?? false);
+
+    if (micOk && camOk) return true;
+
+    final denied = <String>[];
+    if (!micOk) denied.add('microphone');
+    if (isVideo && !(statuses[Permission.camera]?.isGranted ?? false)) {
+      denied.add('camera');
+    }
+
+    final permanentlyDenied = denied.any((p) {
+      final s = p == 'microphone'
+          ? statuses[Permission.microphone]
+          : statuses[Permission.camera];
+      return s?.isPermanentlyDenied ?? false;
+    });
+
+    showAppNotification(
+      context,
+      permanentlyDenied
+          ? '${denied.join(' & ')} permission is blocked. Please enable it '
+              'in Settings to start calls.'
+          : 'Calls need ${denied.join(' & ')} access. Please allow the '
+              'permission to continue.',
+      type: AppNotificationType.error,
+      duration: const Duration(seconds: 5),
+    );
+    return false;
+  }
+
   void _markPeerNotificationsAsRead() {
     unawaited(
       NotificationService.instance.clearMessageNotificationsFor(
@@ -814,10 +922,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   final List<String> _pendingSeenIds = [];
 
   void _markAsSeen(
-    Map<String, dynamic> rawData,
-    List<dynamic> messages,
-    String chatId,
-  ) {
+      Map<String, dynamic> rawData,
+      List<dynamic> messages,
+      String chatId,
+      ) {
     final user = currentUser;
     if (user == null) return;
 
@@ -834,7 +942,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     // In Supabase, the ID is usually part of the rawData
     String? docId = rawData['id']?.toString();
-    
+
     if (docId == null || _pendingSeenIds.contains(docId)) return;
 
     _pendingSeenIds.add(docId);
@@ -854,10 +962,18 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     client
         .from('messages')
-        .update({'seen': true})
+        .update({'seen': true, 'seen_at': DateTime.now().toIso8601String()})
         .inFilter('id', idsToUpdate)
-        .catchError((_) {
-      // Silently ignore — read receipt is best-effort.
+        .catchError((_) async {
+      // FALLBACK (DB za zamani bila seen_at): seen bado iandikwe.
+      try {
+        await client
+            .from('messages')
+            .update({'seen': true})
+            .inFilter('id', idsToUpdate);
+      } catch (_) {
+        // Silently ignore — read receipt is best-effort.
+      }
     });
   }
 
@@ -987,40 +1103,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     );
   }
   // ============================================================
-  // VIP THEME
+  // CHAT PALETTE (classic only — single source of truth)
   // ============================================================
-
-  Color _getThemeBackgroundColor(String tier) {
-    switch (tier) {
-      case 'diamond':
-        return const Color(0xFF1A0B2E);
-
-      case 'gold':
-        return const Color(0xFF2C2416);
-
-      case 'bronze':
-        return const Color(0xFF24170F);
-
-      default:
-        return const Color(0xFFF3F4F8);
-    }
-  }
-
-  Color _getThemeAccentColor(String tier) {
-    switch (tier) {
-      case 'diamond':
-        return const Color(0xFFB9F2FF);
-
-      case 'gold':
-        return const Color(0xFFFFD700);
-
-      case 'bronze':
-        return const Color(0xFFCD7F32);
-
-      default:
-        return AppColors.primary;
-    }
-  }
+  // The old diamond/gold/bronze switch tinted this page per user and is
+  // intentionally gone: every chat uses the theme background + the rose
+  // AppColors.primaryGradient for MY bubbles.
 
   // ============================================================
   // PROFILE AVATAR - SAFE
@@ -1074,18 +1161,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     required double radius,
     required bool isLuxury,
   }) {
+    // FIXED: neutral grey fallback for everyone (no luxury tint).
     return Container(
       width: radius * 2,
       height: radius * 2,
-      color: isLuxury
-          ? Colors.white.withValues(alpha: 0.12)
-          : Colors.grey.shade200,
+      color: Colors.grey.shade200,
       child: Icon(
         Icons.person_rounded,
         size: radius * 1.15,
-        color: isLuxury
-            ? Colors.white54
-            : Colors.grey.shade500,
+        color: Colors.grey.shade500,
       ),
     );
   }
@@ -1119,61 +1203,24 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       );
     }
 
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('users')
-          .stream(primaryKey: ['uid'])
-          .eq('uid', widget.chat.id),
-      builder: (context, snapshot) {
-        String otherTier = 'none';
+    // No outer user/tier StreamBuilders on purpose: the classic theme never
+    // changes from `users` rows, and wrapping the Scaffold in them meant
+    // every presence heartbeat (~45s) rebuilt the WHOLE page. The shell
+    // below is static and messages/typing/presence refresh in the
+    // background via the small cached StreamBuilders.
+    //
+    // COLOR SYSTEM (single source of truth): AppColors.primaryGradient
+    // (#FF4B6E -> #E03355) for MY bubbles + send button, theme
+    // scaffoldBackgroundColor for the page, and Colors.white for peer
+    // bubbles. isLuxury stays false so all bubbles share one palette.
 
-        if (snapshot.hasData &&
-            snapshot.data!.isNotEmpty) {
-          final data = snapshot.data!.first;
-          otherTier = _safeTier(data['badge_tier']);
-        }
+    final bgColor = Theme.of(context).scaffoldBackgroundColor;
 
-        return StreamBuilder<List<Map<String, dynamic>>>(
-          stream: Supabase.instance.client
-              .from('users')
-              .stream(primaryKey: ['uid'])
-              .eq('uid', user.id),
-          builder: (context, mySnapshot) {
-            String myTier = 'none';
+    const accentColor = AppColors.primary;
 
-            if (mySnapshot.hasData &&
-                mySnapshot.data!.isNotEmpty) {
-              final data = mySnapshot.data!.first;
-              myTier = _safeTier(data['badge_tier']);
-            }
+    const isLuxury = false;
 
-            String activeTier = 'none';
-
-            if (otherTier == 'diamond' ||
-                myTier == 'diamond') {
-              activeTier = 'diamond';
-            } else if (otherTier == 'gold' ||
-                myTier == 'gold') {
-              activeTier = 'gold';
-            } else if (otherTier == 'bronze' ||
-                myTier == 'bronze') {
-              activeTier = 'bronze';
-            }
-
-            final bgColor =
-            _getThemeBackgroundColor(
-              activeTier,
-            );
-
-            final accentColor =
-            _getThemeAccentColor(
-              activeTier,
-            );
-
-            final isLuxury =
-                activeTier != 'none';
-
-            return Scaffold(
+    return Scaffold(
               extendBodyBehindAppBar: true,
               backgroundColor: bgColor,
 
@@ -1187,9 +1234,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                       sigmaY: 12,
                     ),
                     child: AppBar(
-                      backgroundColor: isLuxury
-                          ? bgColor.withValues(alpha: 0.7)
-                          : Colors.white
+                      // FIXED palette: theme surface at 70% — the AppBar
+                      // itself never rebuilds (only the tiny presence
+                      // StreamBuilder inside the title does).
+                      backgroundColor: Theme.of(context)
+                          .colorScheme
+                          .surface
                           .withValues(alpha: 0.7),
                       elevation: 0,
                       scrolledUnderElevation: 0,
@@ -1198,9 +1248,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         icon: Icon(
                           Icons
                               .arrow_back_ios_new_rounded,
-                          color: isLuxury
-                              ? Colors.white
-                              : Colors.black87,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurface,
                         ),
                         onPressed: () =>
                             Navigator.pop(context),
@@ -1242,9 +1292,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                     overflow:
                                     TextOverflow.ellipsis,
                                     style: TextStyle(
-                                      color: isLuxury
-                                          ? Colors.white
-                                          : Colors.black87,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
                                       fontSize: 16,
                                       fontWeight:
                                       FontWeight.bold,
@@ -1255,12 +1305,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                   // WhatsApp): inaonekana "Online" ikiwa
                                   // peer ifanye presence; bila isogwa,
                                   // inaonekana lastSeen.
+                                  // CACHED stream: this tiny widget alone
+                                  // rebuilds — the page shell stays put.
                                   StreamBuilder<
                                       Map<String, dynamic>?>(
-                                    stream: PresenceService
-                                        .streamPeerPresence(
-                                      widget.chat.id,
-                                    ),
+                                    stream: _presenceStream,
                                     builder: (context,
                                         presenceData) {
                                       // Mwenzake akiwa amezima "Onyesha
@@ -1269,8 +1318,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                       // last_seen yake (privacy).
                                       final peerHidesStatus =
                                           presenceData.data?[
-                                              'show_online_status_enabled'] ==
-                                          false;
+                                          'show_online_status_enabled'] ==
+                                              false;
                                       final online = !peerHidesStatus &&
                                           PresenceService.isOnline(
                                             presenceData.data,
@@ -1315,26 +1364,27 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                                 : 'Online')
                                                 : (lastSeen != null
                                                 ? PresenceService
-                                                    .lastSeenLabel(
-                                                    lastSeen,
-                                                    swPrefix:
-                                                    'zilizopita',
-                                                  )
+                                                .lastSeenLabel(
+                                              lastSeen,
+                                              swPrefix:
+                                              'zilizopita',
+                                            )
                                                 : 'offline'),
                                             style: TextStyle(
                                               color: online
-                                                  ? (isLuxury
-                                                  ? Colors.white70
-                                                  : Colors.black54)
-                                                  : (isLuxury
-                                                  ? Colors.white38
-                                                  : Colors.black38),
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .onSurfaceVariant
+                                                      .withValues(alpha: 0.7),
                                               fontSize: 11,
                                             ),
                                           ),
                                         ],
-                                        );
-                                        },
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
@@ -1344,7 +1394,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                       ),
 
                       actions: [
-                        // AUDIO CALL
+                        // AUDIO CALL (ZEGO 1-on-1 voice invitation)
                         Container(
                           margin:
                           const EdgeInsets.only(
@@ -1352,56 +1402,47 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                           ),
                           decoration:
                           BoxDecoration(
-                            color: (isLuxury
-                                ? accentColor
-                                : AppColors
-                                .primaryDeep)
+                            color: AppColors
+                                .primaryDeep
                                 .withValues(alpha: 0.12),
                             shape:
                             BoxShape.circle,
                           ),
-                          child: IconButton(
-                            tooltip:
-                            'Audio call',
-                            icon: Icon(
-                              Icons
-                                  .call_rounded,
-                              color: isLuxury
-                                  ? accentColor
-                                  : AppColors
-                                  .primaryDeep,
-                              size: 21,
+                          child:
+                          ZegoSendCallInvitationButton(
+                            invitees: [
+                              ZegoUIKitUser(
+                                id: ZegoCallService.sanitizeUserId(widget.chat.id),
+                                name: widget.chat.name,
+                              ),
+                            ],
+                            isVideoCall: false,
+                            resourceID: ZegoCallService.resourceID,
+                            buttonSize: const Size(44, 44),
+                            borderRadius: 22,
+                            icon: ButtonIcon(
+                              icon: Icon(
+                                Icons.call_rounded,
+                                color: AppColors.primaryDeep,
+                                size: 21,
+                              ),
                             ),
-                            onPressed:
-                                () {
-                              CallScreen
-                                  .push(
-                                context,
-                                callType:
-                                CallType
-                                    .audio,
-                                peerName:
-                                widget
-                                    .chat
-                                    .name,
-                                peerAvatarUrl:
-                                widget
-                                    .chat
-                                    .avatarUrl,
-                                isOutgoing:
-                                true,
-                                peerUid:
-                                widget
-                                    .chat
-                                    .id,
-                                callId:
-                                'call_${DateTime.now().millisecondsSinceEpoch}',
-                              );
+                            // Omba microphonе kabla ya kutuma invitation.
+                            onWillPressed: () =>
+                                _ensureCallPermissions(isVideo: false),
+                            onPressed: (code, message, _) {
+                              if (code != '0' && mounted) {
+                                showAppNotification(
+                                  context,
+                                  'Call failed: $message',
+                                  type: AppNotificationType.error,
+                                );
+                              }
                             },
                           ),
                         ),
 
-                        // VIDEO CALL
+                        // VIDEO CALL (ZEGO 1-on-1 video invitation)
                         Container(
                           margin:
                           const EdgeInsets.only(
@@ -1409,51 +1450,42 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                           ),
                           decoration:
                           BoxDecoration(
-                            color: (isLuxury
-                                ? accentColor
-                                : AppColors
-                                .primaryDeep)
+                            color: AppColors
+                                .primaryDeep
                                 .withValues(alpha: 0.12),
                             shape:
                             BoxShape.circle,
                           ),
-                          child: IconButton(
-                            tooltip:
-                            'Video call',
-                            icon: Icon(
-                              Icons
-                                  .videocam_rounded,
-                              color: isLuxury
-                                  ? accentColor
-                                  : AppColors
-                                  .primaryDeep,
-                              size: 22,
+                          child:
+                          ZegoSendCallInvitationButton(
+                            invitees: [
+                              ZegoUIKitUser(
+                                id: ZegoCallService.sanitizeUserId(widget.chat.id),
+                                name: widget.chat.name,
+                              ),
+                            ],
+                            isVideoCall: true,
+                            resourceID: ZegoCallService.resourceID,
+                            buttonSize: const Size(44, 44),
+                            borderRadius: 22,
+                            icon: ButtonIcon(
+                              icon: Icon(
+                                Icons.videocam_rounded,
+                                color: AppColors.primaryDeep,
+                                size: 22,
+                              ),
                             ),
-                            onPressed:
-                                () {
-                              CallScreen
-                                  .push(
-                                context,
-                                callType:
-                                CallType
-                                    .video,
-                                peerName:
-                                widget
-                                    .chat
-                                    .name,
-                                peerAvatarUrl:
-                                widget
-                                    .chat
-                                    .avatarUrl,
-                                isOutgoing:
-                                true,
-                                peerUid:
-                                widget
-                                    .chat
-                                    .id,
-                                callId:
-                                'call_${DateTime.now().millisecondsSinceEpoch}',
-                              );
+                            // Omba camera + microphonе kabla ya kutuma invitation.
+                            onWillPressed: () =>
+                                _ensureCallPermissions(isVideo: true),
+                            onPressed: (code, message, _) {
+                              if (code != '0' && mounted) {
+                                showAppNotification(
+                                  context,
+                                  'Call failed: $message',
+                                  type: AppNotificationType.error,
+                                );
+                              }
                             },
                           ),
                         ),
@@ -1465,11 +1497,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                             right: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: (isLuxury
-                                ? AppColors
-                                .coinGold
-                                : AppColors
-                                .coinGoldDark)
+                            color: AppColors
+                                .coinGoldDark
                                 .withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                           ),
@@ -1477,10 +1506,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                             icon: Icon(
                               Icons
                                   .card_giftcard_rounded,
-                              color: isLuxury
-                                  ? AppColors
-                                  .coinGold
-                                  : AppColors
+                              color: AppColors
                                   .coinGoldDark,
                               size: 24,
                             ),
@@ -1561,19 +1587,20 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
                   Column(
                     children: [
+                      // ---- BACKGROUND-REFRESH MESSAGE LIST ----
+                      // Uses the CACHED _messagesStream, so presence/typing/
+                      // keystroke setStates reuse the same subscription and
+                      // ONLY this Expanded rebuilds.
                       Expanded(
                         child: StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: Supabase.instance.client
-                              .from('messages')
-                              .stream(primaryKey: ['id'])
-                              .eq('chat_id', chatId)
-                              .order('created_at', ascending: false),
+                          stream: _messagesStream,
                           builder:
                               (context, snapshot) {
                             if (snapshot
                                 .connectionState ==
                                 ConnectionState
-                                    .waiting) {
+                                    .waiting &&
+                                !snapshot.hasData) {
                               return const Center(
                                 child:
                                 HeartLoader(size: 60),
@@ -1585,9 +1612,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 child: Text(
                                   "Failed to load messages.",
                                   style: TextStyle(
-                                    color: isLuxury
-                                        ? Colors.white70
-                                        : Colors.black54,
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               );
@@ -1597,11 +1622,9 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 snapshot.data!.isEmpty) {
                               return Center(
                                 child: Text(
-                                  "Anzisha mazungumzo leo! ðŸ‘‹",
+                                  "Anzisha mazungumzo leo!",
                                   style: TextStyle(
-                                    color: isLuxury
-                                        ? Colors.white60
-                                        : Colors.black54,
+                                    color: AppColors.textSecondary,
                                   ),
                                 ),
                               );
@@ -1609,7 +1632,34 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
                             final messages = snapshot.data!;
 
+                            // Post-frame only: queue seen-receipts + scroll +
+                            // count WITHOUT mutating state during build, so
+                            // these side-effects can't loop a page refresh.
+                            if (!_chatLocked) {
+                              for (int i = 0;
+                                  i < messages.length && i < 30;
+                                  i++) {
+                                _markAsSeen(
+                                    messages[i], messages, chatId);
+                              }
+                            }
+                            if (!_seenFrameScheduled) {
+                              _seenFrameScheduled = true;
+                              WidgetsBinding.instance
+                                  .addPostFrameCallback((_) {
+                                _seenFrameScheduled = false;
+                                if (!mounted) return;
+                                if (messages.length >
+                                    _renderedMessageCount) {
+                                  _scrollToBottom();
+                                }
+                                _renderedMessageCount =
+                                    messages.length;
+                              });
+                            }
+
                             return ListView.builder(
+                              controller: _scrollController,
                               reverse: true,
                               physics:
                               const BouncingScrollPhysics(),
@@ -1634,24 +1684,16 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                   chatId,
                                 );
 
-                                // Mark unread messages as seen when they
-                                // appear on-screen (read receipt).
-                                _markAsSeen(rawData, messages, chatId);
-
                                 // Animate only genuinely NEW
                                 // messages (index 0 of the
                                 // reversed list) so scrolling
-                                // stays smooth.
+                                // stays smooth. _renderedMessageCount is
+                                // updated post-frame above — never here —
+                                // so this builder stays side-effect free.
                                 final canAnimate =
                                     index == 0 &&
                                         messages.length >
-                                            _lastMessageCount;
-
-                                if (messages.length !=
-                                    _lastMessageCount) {
-                                  _lastMessageCount =
-                                      messages.length;
-                                }
+                                            _renderedMessageCount;
 
                                 if (!canAnimate) {
                                   return bubble;
@@ -1669,15 +1711,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         ),
                       ),
 
-                      // ==================================================
-                      // TYPING INDICATOR (Firestore-backed)
-                      // ==================================================
-
+                      // TYPING INDICATOR: cached stream so keystrokes/presence
+                      // rebuild ONLY this row, never the message list/page.
                       StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: Supabase.instance.client
-                            .from('chat_rooms')
-                            .stream(primaryKey: ['id'])
-                            .eq('id', chatId),
+                        stream: _typingRoomStream,
                         builder: (context, typingSnapshot) {
                           bool peerTyping = false;
 
@@ -1748,7 +1785,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         const EdgeInsets.all(12),
                         child: ClipRRect(
                           borderRadius:
-                          BorderRadius.circular(30),
+                          AppRadius.xl,
                           child: BackdropFilter(
                             filter:
                             ImageFilter.blur(
@@ -1764,20 +1801,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                               ),
                               decoration:
                               BoxDecoration(
-                                color: isLuxury
-                                    ? Colors.black
-                                    .withValues(alpha: 0.5)
-                                    : Colors.white
+                                // FIXED: frosted white pill for everyone.
+                                color: Colors.white
                                     .withValues(alpha: 0.8),
                                 borderRadius:
-                                BorderRadius.circular(
-                                  30,
-                                ),
+                                AppRadius.pill,
                                 border: Border.all(
-                                  color: isLuxury
-                                      ? accentColor
-                                      .withValues(alpha: 0.3)
-                                      : Colors.white
+                                  color: Colors.white
                                       .withValues(alpha: 0.6),
                                 ),
                                 boxShadow: [
@@ -1864,13 +1894,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                                   child) =>
                                                   Transform
                                                       .scale(
-                                                scale: 1.0 +
-                                                    0.25 *
-                                                        _recordingPulse
-                                                            .value,
-                                                child:
-                                                child,
-                                              ),
+                                                    scale: 1.0 +
+                                                        0.25 *
+                                                            _recordingPulse
+                                                                .value,
+                                                    child:
+                                                    child,
+                                                  ),
                                               child:
                                               const Icon(
                                                 Icons
@@ -1917,30 +1947,24 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                           }
                                         },
                                         style:
-                                        TextStyle(
-                                          color: isLuxury
-                                              ? Colors
-                                              .white
-                                              : Colors
+                                        const TextStyle(
+                                          color: Colors
                                               .black87,
                                         ),
                                         decoration:
-                                        InputDecoration(
+                                        const InputDecoration(
                                           hintText:
                                           "Type a message...",
                                           hintStyle:
                                           TextStyle(
-                                            color: isLuxury
-                                                ? Colors
-                                                .white38
-                                                : Colors
+                                            color: Colors
                                                 .black38,
                                           ),
                                           border:
                                           InputBorder
                                               .none,
                                           contentPadding:
-                                          const EdgeInsets
+                                          EdgeInsets
                                               .symmetric(
                                             horizontal:
                                             12,
@@ -1989,6 +2013,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                         ),
                                         decoration:
                                         BoxDecoration(
+                                          // FIXED GRADIENT: rose for send,
+                                          // red only while recording.
                                           gradient:
                                           _isRecording
                                               ? const LinearGradient(
@@ -1999,19 +2025,16 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                                   .redAccent,
                                             ],
                                           )
-                                              : LinearGradient(
-                                            colors: [
-                                              accentColor,
-                                              accentColor
-                                                  .withValues(alpha: 0.8),
-                                            ],
+                                              : const LinearGradient(
+                                            colors: AppColors
+                                                .primaryGradient,
                                           ),
                                           shape:
                                           BoxShape
                                               .circle,
                                           boxShadow: [
                                             BoxShadow(
-                                              color: accentColor
+                                              color: AppColors.primary
                                                   .withValues(alpha: 0.4),
                                               blurRadius:
                                               10,
@@ -2035,40 +2058,40 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                                     .trim()
                                                     .isNotEmpty;
                                             return AnimatedSwitcher(
-                                          duration:
-                                          const Duration(
-                                            milliseconds:
-                                            200,
-                                          ),
-                                          transitionBuilder:
-                                              (child,
-                                              animation) =>
-                                              ScaleTransition(
-                                            scale:
-                                            animation,
-                                            child:
-                                            child,
-                                          ),
-                                          child: Icon(
-                                            _isRecording
-                                                ? Icons
-                                                .stop_rounded
-                                                : (hasText
-                                                ? Icons
-                                                .send_rounded
-                                                : Icons
-                                                .mic_rounded),
-                                            key: ValueKey(
-                                              _isRecording
-                                                  ? 'stop'
-                                                  : (hasText
-                                                  ? 'send'
-                                                  : 'mic'),
-                                            ),
-                                            color:
-                                            Colors.white,
-                                            size: 22,
-                                          ),
+                                              duration:
+                                              const Duration(
+                                                milliseconds:
+                                                200,
+                                              ),
+                                              transitionBuilder:
+                                                  (child,
+                                                  animation) =>
+                                                  ScaleTransition(
+                                                    scale:
+                                                    animation,
+                                                    child:
+                                                    child,
+                                                  ),
+                                              child: Icon(
+                                                _isRecording
+                                                    ? Icons
+                                                    .stop_rounded
+                                                    : (hasText
+                                                    ? Icons
+                                                    .send_rounded
+                                                    : Icons
+                                                    .mic_rounded),
+                                                key: ValueKey(
+                                                  _isRecording
+                                                      ? 'stop'
+                                                      : (hasText
+                                                      ? 'send'
+                                                      : 'mic'),
+                                                ),
+                                                color:
+                                                Colors.white,
+                                                size: 22,
+                                              ),
                                             );
                                           },
                                         ),
@@ -2096,7 +2119,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         child: BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                           child: Container(
-                            color: (isLuxury ? Colors.black : Colors.white)
+                            color: Colors.white
                                 .withValues(alpha: 0.78),
                             child: _buildChatLockOverlay(isLuxury, accentColor),
                           ),
@@ -2106,10 +2129,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                 ],
               ),
             );
-          },
-        );
-      },
-    );
   }
 
   // ============================================================
@@ -2153,21 +2172,17 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               0.75,
         ),
         decoration: BoxDecoration(
+          // FIXED GRADIENT: single rose gradient for MY bubbles
+          // (AppColors.primaryGradient #FF4B6E -> #E03355), solid white
+          // for peer bubbles. No per-user tinting.
           gradient: isMe
-              ? LinearGradient(
-            colors: [
-              accentColor,
-              accentColor.withValues(alpha: 0.8),
-            ],
+              ? const LinearGradient(
+            colors: AppColors.primaryGradient,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           )
               : null,
-          color: isMe
-              ? null
-              : (isLuxury
-              ? Colors.white.withValues(alpha: 0.1)
-              : Colors.white.withValues(alpha: 0.9)),
+          color: isMe ? null : Colors.white,
           borderRadius:
           BorderRadius.only(
             topLeft:
@@ -2184,8 +2199,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           boxShadow: [
             BoxShadow(
               color: isMe
-                  ? accentColor.withValues(alpha: 0.25)
-                  : Colors.black.withValues(alpha: 0.04),
+                  ? AppColors.primary.withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: 0.06),
               blurRadius: 12,
               offset: const Offset(0, 5),
             ),
@@ -2229,11 +2244,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                     Text(
                       text,
                       style: TextStyle(
-                        color: isMe
-                            ? Colors.white
-                            : (isLuxury
-                            ? Colors.white
-                            : Colors.black87),
+                        color: isMe ? Colors.white : AppColors.textPrimary,
                         fontSize: 15,
                         height: 1.3,
                         fontWeight:
@@ -2253,9 +2264,22 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                     ),
 
                   // ==================================================
-                  // GIFT
+                  // VOICE NOTE (audio) — play/pause + progress + duration.
+                  // URL ni ya Supabase Storage (chat_media) kwenye
+                  // messages.media_url; mpokeaji anacheza moja kwa moja.
                   // ==================================================
 
+                  if (type == 'audio' && mediaUrl.isNotEmpty)
+                    SizedBox(
+                      width: 220,
+                      child: VoiceNoteBubble(
+                        mediaUrl: mediaUrl,
+                        isMe: isMe,
+                        isLuxury: isLuxury,
+                      ),
+                    ),
+
+                  // GIFT — fixed gold card for everyone.
                   if (type == 'gift')
                     _buildGiftMessage(
                       text,
@@ -2278,10 +2302,8 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         style: TextStyle(
                           fontSize: 10,
                           color: isMe
-                              ? Colors.white.withValues(alpha: 0.7)
-                              : (isLuxury
-                                  ? Colors.white38
-                                  : Colors.black38),
+                              ? Colors.white.withValues(alpha: 0.85)
+                              : AppColors.textSecondary,
                         ),
                       ),
                       if (isMe) ...[
@@ -2327,12 +2349,12 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   }
 
   Widget _buildGiftMessage(
-    String giftText,
-    String? mediaUrl,
-    bool isMe,
-    bool isLuxury,
-    Color accentColor,
-  ) {
+      String giftText,
+      String? mediaUrl,
+      bool isMe,
+      bool isLuxury,
+      Color accentColor,
+      ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -2344,7 +2366,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.md,
         border: Border.all(
           color: AppColors.coinGold.withValues(alpha: 0.3),
           width: 1,
@@ -2361,21 +2383,21 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
             ),
             child: mediaUrl != null && mediaUrl.isNotEmpty
                 ? Image.network(
-                    mediaUrl,
-                    width: 30,
-                    height: 30,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.card_giftcard_rounded,
-                      color: AppColors.coinGoldDark,
-                      size: 24,
-                    ),
-                  )
+              mediaUrl,
+              width: 30,
+              height: 30,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.card_giftcard_rounded,
+                color: AppColors.coinGoldDark,
+                size: 24,
+              ),
+            )
                 : const Icon(
-                    Icons.card_giftcard_rounded,
-                    color: AppColors.coinGoldDark,
-                    size: 24,
-                  ),
+              Icons.card_giftcard_rounded,
+              color: AppColors.coinGoldDark,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 10),
           Flexible(
@@ -2384,18 +2406,18 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
               children: [
                 Text(
                   _lang.t('Gift Sent!', sw: 'Gift Sent!'),
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
-                    color: isLuxury ? Colors.white : Colors.black87,
+                    color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   giftText,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: isLuxury ? Colors.white70 : Colors.black54,
+                    color: Colors.black54,
                   ),
                 ),
               ],
@@ -2426,14 +2448,16 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     final url = mediaUrl.trim();
 
     if (_isValidUrl(url)) {
-      return ClipRRect(
-        borderRadius:
-        BorderRadius.circular(16),
-        child: Image.network(
-          url,
-          height: 190,
-          width: 240,
-          fit: BoxFit.cover,
+      return GestureDetector(
+        onTap: () => _openImagePreview(url),
+        child: ClipRRect(
+          borderRadius:
+          AppRadius.md,
+          child: Image.network(
+            url,
+            height: 190,
+            width: 240,
+            fit: BoxFit.cover,
           errorBuilder:
               (context, error, stackTrace) {
             return _brokenMediaPlaceholder(
@@ -2460,12 +2484,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                     : Colors.black
                     .withValues(alpha: 0.05),
                 borderRadius:
-                BorderRadius.circular(16),
+                AppRadius.md,
               ),
               child:
               const HeartLoader(size: 42),
             );
           },
+          ),
         ),
       );
     }
@@ -2476,9 +2501,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
       future: file.exists(),
       builder: (context, snapshot) {
         if (snapshot.data == true) {
-          return ClipRRect(
+          return GestureDetector(
+            onTap: () => _openImagePreview(url),
+            child: ClipRRect(
             borderRadius:
-            BorderRadius.circular(16),
+            AppRadius.md,
             child: Image.file(
               file,
               height: 190,
@@ -2494,6 +2521,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                 );
               },
             ),
+          ),
           );
         }
 
@@ -2507,6 +2535,22 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   }
 
   // ============================================================
+  // IMAGE PREVIEW + DOWNLOAD
+  // ============================================================
+
+  /// Hufungua picha iliyotumwa kwenye preview kubwa (fullscreen)
+  /// yenye uwezo wa ku-zoom na kitufe cha kudownload.
+  void _openImagePreview(String mediaUrl) {
+    final url = mediaUrl.trim();
+    if (url.isEmpty || !mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _ChatImagePreviewPage(imageUrl: url),
+      ),
+    );
+  }
+
+  // ============================================================
   // BROKEN MEDIA
   // ============================================================
 
@@ -2515,17 +2559,16 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     required bool isMe,
     required bool isLuxury,
   }) {
+    // FIXED: same muted placeholder for every bubble.
     return Container(
       width: 220,
       height: 130,
       decoration: BoxDecoration(
         color: isMe
             ? Colors.white.withValues(alpha: 0.12)
-            : (isLuxury
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.black.withValues(alpha: 0.05)),
+            : Colors.black.withValues(alpha: 0.05),
         borderRadius:
-        BorderRadius.circular(16),
+        AppRadius.md,
       ),
       child: Column(
         mainAxisAlignment:
@@ -2535,24 +2578,196 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
             icon,
             size: 38,
             color: isMe
-                ? Colors.white54
-                : (isLuxury
-                ? Colors.white54
-                : Colors.black38),
+                ? Colors.white70
+                : Colors.black38,
           ),
           const SizedBox(height: 8),
           Text(
             "Media haipatikani",
             style: TextStyle(
               color: isMe
-                  ? Colors.white54
-                  : (isLuxury
-                  ? Colors.white54
-                  : Colors.black45),
+                  ? Colors.white70
+                  : Colors.black45,
               fontSize: 12,
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Skrini ya fullscreen ya ku-preview picha ya chat.
+class _ChatImagePreviewPage extends StatefulWidget {
+  final String imageUrl;
+
+  const _ChatImagePreviewPage({required this.imageUrl});
+
+  @override
+  State<_ChatImagePreviewPage> createState() =>
+      _ChatImagePreviewPageState();
+}
+
+class _ChatImagePreviewPageState
+    extends State<_ChatImagePreviewPage> {
+  bool _downloading = false;
+
+  bool get _isRemote =>
+      widget.imageUrl.startsWith('http://') ||
+      widget.imageUrl.startsWith('https://');
+
+  Future<void> _downloadImage() async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    try {
+      Uint8List bytes;
+      if (_isRemote) {
+        final client = HttpClient();
+        try {
+          final request =
+              await client.getUrl(Uri.parse(widget.imageUrl));
+          final response = await request.close();
+          if (response.statusCode != 200) {
+            throw Exception('Download ${response.statusCode}');
+          }
+          final chunks = <int>[];
+          await for (final chunk in response) {
+            chunks.addAll(chunk);
+          }
+          bytes = Uint8List.fromList(chunks);
+        } finally {
+          client.close();
+        }
+      } else {
+        final file = File(widget.imageUrl);
+        if (!await file.exists()) {
+          throw Exception('File not found');
+        }
+        bytes = await file.readAsBytes();
+      }
+
+      if (bytes.isEmpty) throw Exception('Empty file');
+
+      Directory? dir;
+      try {
+        dir = await getDownloadsDirectory();
+      } catch (_) {
+        dir = null;
+      }
+      dir ??= await getApplicationDocumentsDirectory();
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      final name =
+          'pacific_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final saved = File('${dir.path}/$name');
+      await saved.writeAsBytes(bytes, flush: true);
+
+      if (!mounted) return;
+      showAppNotification(
+        context,
+        'Picha imehifadhiwa',
+        color: Colors.green,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      showAppNotification(
+        context,
+        'Download imeshindikana. Jaribu tena.',
+        color: Colors.redAccent,
+      );
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close_rounded, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Picha',
+          style: TextStyle(color: Colors.white),
+        ),
+        actions: [
+          _downloading
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
+              : IconButton(
+                  tooltip: 'Download',
+                  icon: const Icon(
+                    Icons.download_rounded,
+                    color: Colors.white,
+                  ),
+                  onPressed: _downloadImage,
+                ),
+        ],
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.8,
+          maxScale: 4.0,
+          child: _isRemote
+              ? Image.network(
+                  widget.imageUrl,
+                  fit: BoxFit.contain,
+                )
+              : Image.file(
+                  File(widget.imageUrl),
+                  fit: BoxFit.contain,
+                ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 18),
+          child: SizedBox(
+            height: 52,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              onPressed: _downloading ? null : _downloadImage,
+              icon: _downloading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.download_rounded),
+              label: Text(
+                _downloading ? 'Inapakua...' : 'Download',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -2648,20 +2863,17 @@ class _TypingIndicatorState extends State<_TypingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    // FIXED palette: white card + rose dots for everyone.
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 16,
         vertical: 12,
       ),
       decoration: BoxDecoration(
-        color: widget.isLuxury
-            ? Colors.black.withValues(alpha: 0.5)
-            : Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        color: Colors.white,
+        borderRadius: AppRadius.card,
         border: Border.all(
-          color: widget.isLuxury
-              ? widget.accentColor.withValues(alpha: 0.3)
-              : Colors.grey.shade300,
+          color: Colors.grey.shade300,
         ),
         boxShadow: [
           BoxShadow(
@@ -2678,7 +2890,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
             mainAxisSize: MainAxisSize.min,
             children: List.generate(3, (i) {
               final t =
-                  ((_controller.value - i * 0.18) % 1.0).abs();
+              ((_controller.value - i * 0.18) % 1.0).abs();
               final bounce = 1.0 - (1 - t).abs() * 0.9;
 
               return Padding(
@@ -2690,10 +2902,7 @@ class _TypingIndicatorState extends State<_TypingIndicator>
                     height: 9,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: widget.isLuxury
-                          ? widget.accentColor
-                          .withValues(alpha: 0.35 + 0.65 * bounce)
-                          : AppColors.primary
+                      color: AppColors.primary
                           .withValues(alpha: 0.35 + 0.65 * bounce),
                     ),
                   ),

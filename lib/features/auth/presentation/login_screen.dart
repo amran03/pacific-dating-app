@@ -6,6 +6,8 @@ import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_
 import 'package:pacific_dating_app/features/auth/presentation/reset_password_screen.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -60,12 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showMessage(String message, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
-    );
+    showAppNotification(context, message, color: color);
   }
 
   @override
@@ -100,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                "Ingiza namba yako ya simu na password kuendelea.",
+                "Enter your phone number and password to continue.",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w300,
@@ -119,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: AppRadius.md,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.05),
@@ -151,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: AppRadius.md,
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withValues(alpha: 0.05),
@@ -217,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     backgroundColor: AppColors.primary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: AppRadius.xl,
                     ),
                   ),
                   child: _isLoading

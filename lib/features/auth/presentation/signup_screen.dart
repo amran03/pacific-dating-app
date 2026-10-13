@@ -6,6 +6,8 @@ import '../../../../features/profile/presentation/screens/terms_conditions_scree
 import '../../../../features/profile/presentation/screens/privacy_policy_screen.dart';
 import 'create_password_screen.dart' show phoneToSyntheticEmail;
 import 'login_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -63,28 +65,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Account created! Welcome."),
-          backgroundColor: Colors.green,
-        ),
-      );
+      showAppNotification(context, "Account created! Welcome.", color: Colors.green);
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(friendlyAuthError(e)),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppNotification(context, friendlyAuthError(e), color: Colors.red);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Unexpected error: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showAppNotification(context, "Unexpected error: $e", color: Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -175,11 +162,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       vertical: 16,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.md,
                       borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.md,
                       borderSide: const BorderSide(
                         color: AppColors.primary,
                         width: 2,
@@ -214,11 +201,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       vertical: 16,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.md,
                       borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.md,
                       borderSide: const BorderSide(
                         color: AppColors.primary,
                         width: 2,
@@ -268,11 +255,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       vertical: 16,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.md,
                       borderSide: BorderSide.none,
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: AppRadius.md,
                       borderSide: const BorderSide(
                         color: AppColors.primary,
                         width: 2,
@@ -293,7 +280,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   height: 56,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: AppRadius.xl,
                       gradient: const LinearGradient(
                         colors: AppColors.primaryGradient,
                       ),
@@ -311,7 +298,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         shadowColor: Colors.transparent,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
+                          borderRadius: AppRadius.xl,
                         ),
                       ),
                       onPressed: _isLoading ? null : _onSignUp,

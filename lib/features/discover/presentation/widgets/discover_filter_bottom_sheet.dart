@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class DiscoverFilterBottomSheet extends StatefulWidget {
   const DiscoverFilterBottomSheet({super.key});
@@ -41,7 +43,7 @@ class _DiscoverFilterBottomSheetState extends State<DiscoverFilterBottomSheet> {
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: AppRadius.sm,
               ),
             ),
           ),
@@ -79,7 +81,7 @@ class _DiscoverFilterBottomSheetState extends State<DiscoverFilterBottomSheet> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     decoration: BoxDecoration(
                       color: isSelected ? AppColors.primary : AppColors.inputFill,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: AppRadius.sm,
                     ),
                     child: Center(
                       child: Text(
@@ -161,16 +163,11 @@ class _DiscoverFilterBottomSheetState extends State<DiscoverFilterBottomSheet> {
             child: ElevatedButton(
               onPressed: () {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Preferences updated!"),
-                    backgroundColor: AppColors.primary,
-                  ),
-                );
+                showAppNotification(context, "Preferences updated!", color: AppColors.primary);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.xl),
               ),
               child: const Text(
                 "Apply Filters",

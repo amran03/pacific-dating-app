@@ -119,6 +119,88 @@ class MatchmakingService {
     return out;
   }
 
+  // ============================================================
+  // GENDER PREFERENCE FILTER (Discover)
+  // ============================================================
+  // Database values zinazoonekana kwenye app:
+  //  gender             : "Man" | "Woman" | "More options" (gender_screen.dart)
+  //  interested_gender  : "Wanaume (Men) 👨" | "Wanawake (Women) 👩" |
+  //                       "Wote (Everyone) 🌈" (profile_setup_screen.dart /
+  //                       setup_account_screen.dart)
+  // Normalization hii inaruhusu jina lolote la kawaida (male/man/men,
+  // female/woman/women, everyone/all/both) zifanye kazi sawa.
+
+  /// Puts a raw gender string into one of: male | female | other.
+  static String normalizeGender(String? raw) {
+    final g = (raw ?? '').trim().toLowerCase();
+    if (g.isEmpty) return 'unknown';
+    const maleWords = ['man', 'men', 'male', 'mume', 'wanaume'];
+    const femaleWords = ['woman', 'women', 'female', 'mke', 'wanawake'];
+    for (final w in maleWords) {
+      if (g.contains(w)) return 'male';
+    }
+    for (final w in femaleWords) {
+      if (g.contains(w)) return 'female';
+    }
+    return 'other';
+  }
+
+  /// "Wanawake (Women) 👩" -> female; "Wote (Everyone) 🌈" -> everyone.
+  /// Null/empty/tambua isiyojulikana -> everyone (usichuje Discover bure).
+  static String normalizeInterest(String? raw) {
+    final i = (raw ?? '').trim().toLowerCase();
+    if (i.isEmpty) return 'everyone';
+    if (i.contains('woman') ||
+        i.contains('women') ||
+        i.contains('female') ||
+        i.contains('wanawake')) {
+      return 'female';
+    }
+    if (i.contains('man') ||
+        i.contains('men') ||
+        i.contains('male') ||
+        i.contains('wanaume')) {
+      return 'male';
+    }
+    if (i.contains('everyone') || i.contains('wote') || i.contains('all') || i.contains('both')) {
+      return 'everyone';
+    }
+    return 'everyone';
+  }
+
+  /// Fetch gender + interested_gender za mtumiaji (best-effort).
+  Future<Map<String, String?>> _fetchMyGenderPrefs() async {
+    final uid = _myUid;
+    if (uid == null) return {'gender': null, 'interested': null};
+    try {
+      final row = await _client
+          .from('users')
+          .select('gender,interested_gender')
+          .eq('uid', uid)
+          .maybeSingle();
+      return {
+        'gender': row?['gender']?.toString(),
+        'interested': row?['interested_gender']?.toString(),
+      };
+    } catch (_) {
+      return {'gender': null, 'interested': null};
+    }
+  }
+
+  /// Kucha wa Discover: aonyeshe TU watu wanaolingana na jinsia
+  /// aliyoipendelea kuona (`interested_gender` ya mtumiaji).
+  /// Mfano: mwanaume aliyesema "Wanawake" haoni wanaume wenzake.
+  /// Ikiwa mtumiaji hajaongea preference (null/empty) au amechagua
+  /// "Everyone" — watu wote wanaonekana (hakuna filter).
+  List<UserModel> _applyGenderPreference(
+    List<UserModel> candidates,
+    String? interestedRaw,
+  ) {
+    final wanted = normalizeInterest(interestedRaw);
+    if (wanted == 'everyone') return candidates;
+    return candidates.where((u) => normalizeGender(u.gender) == wanted).toList();
+  }
+
   Future<List<UserModel>> fetchDiscoverableUsers({int limit = 15}) async {
     final uid = _myUid;
     // 1. My swipes (best-effort: failure must never block Discover).
@@ -190,6 +272,14 @@ class MatchmakingService {
     if (candidates.isEmpty && lastError != null) {
       throw Exception(friendlyDiscoverError(lastError));
     }
+
+    // GENDER PREFERENCE FILTER — Discover iweze kuonyesha tu watu
+    // wanaolingana na jinsia aliyoipendelea kuona mtumiaji aliye-login
+    // (field: interested_gender + gender kwenye table ya users).
+    // Best-effort: kama fetch ya prefs imeshindikana, watu wote wanaonekana
+    // (hatuoki Discover kuwa tupu kwa sababu ya network blip).
+    final myPrefs = await _fetchMyGenderPrefs();
+    candidates = _applyGenderPreference(candidates, myPrefs['interested']);
 
     final Map<String, int> tierPriority = {
       'diamond': 3,

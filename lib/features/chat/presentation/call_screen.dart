@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_color.dart';
 import '../../../core/services/call_service.dart';
 import '../../../core/services/user_prefs.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 enum CallType { audio, video }
 
@@ -19,12 +20,18 @@ enum CallPhase { ringing, connecting, ongoing, ended }
 
 /// Real voice/video call screen (WebRTC).
 ///
-/// Signaling inafanyika kupitia Supabase Realtime Broadcast kwenye channel ya
-/// pamoja `call:<callId>` — events: accept / offer / answer / ice / decline /
-/// end. Media inapita P2P to WebRTC (Google STUN; to mitandao ya ngumu
-/// zaidi weka TURN server kwenye _peerConfig chini).
-/// Incoming rings zinakuja kupitia CallService (channel ya faragha `call:<uid>`).
+/// Signaling happens through a shared Supabase Realtime Broadcast channel
+/// `call:<callId>` — events: accept / offer / answer / ice / decline / end.
+/// Media flows P2P over WebRTC (Google STUN; for stricter networks add a
+/// TURN server to _peerConfig below).
+/// Incoming rings arrive through CallService (private channel `call:<uid>`).
 class CallScreen extends StatefulWidget {
+  /// Idadi ya CallScreen zilizo wazi sasa — PresenceTracker hutumia hii
+  /// kuzuia kufungua CallScreen ya pili kutoka notification tap ikiwa moja
+  /// tayari iko wazi (dup guard).
+  static int _activeInstances = 0;
+  static bool get isActive => _activeInstances > 0;
+
   final CallType callType;
   final String peerName;
   final String? peerAvatarUrl;
@@ -99,32 +106,83 @@ class _CallScreenState extends State<CallScreen>
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
   RealtimeChannel? _channel;
   bool _localVideoReady = false;
-  bool _accepted = false; // callee: mtumiaji amebonyeza Accept
+  bool _accepted = false; // callee: the user tapped Accept
   bool _tornDown = false;
-  bool _offerSent = false; // caller: offer imetumwa mara moja tu
-  String _callerName = 'Pacific user'; // jina la caller (kwa missed-call log)
+  bool _offerSent = false; // caller: the offer was sent only once
+
+  // ICE candidates that arrived BEFORE the remote description was set.
+  // They are buffered and applied as soon as setRemoteDescription
+  // completes. Without this, the first candidates get dropped (addCandidate
+  // fails before the remote SDP) and the call stays "Connecting"
+  // with no audio/video — the classic WebRTC bug.
+  final List<RTCIceCandidate> _pendingIce = [];
+  String _callerName = 'Pacific user'; // caller's name (for the missed-call log)
 
   // ---- RING ALERTS (incoming call) ----
-  // Ringtone inayotengenezwa kwa code (hakuna asset) + vibration loop.
+  // Ringtone generated in code (no asset) + vibration loop.
   final AudioPlayer _ringPlayer = AudioPlayer();
   Uint8List? _ringWav;
   Timer? _vibrateTimer;
 
   bool get _isVideo => widget.callType == CallType.video;
 
-  // STUN ya Google inatosha to karibuni mitandao. Kwa NAT kali (corporate
-  // n.k.) ongeza TURN server hapa: {'urls': 'turn:...','username':...,'credential':...}
-  static const Map<String, dynamic> _peerConfig = {
-    'iceServers': [
+  // ICE servers for calls (WebRTC):
+  //  - Google STUN is enough for most networks (home/4G).
+  //  - Behind strict NATs (corporate/VPN), STUN IS NOT ENOUGH — you need
+  //    a TURN server (relay) for the call to work. Provide via --dart-define:
+  //
+  //    flutter run \
+  //      --dart-define=TURN_URL=turn:your-turn-server.com:3478 \
+  //      --dart-define=TURN_USERNAME=appuser \
+  //      --dart-define=TURN_CREDENTIAL=secret
+  //
+  //    (The TURN credential IS A SECRET — never hardcode it here;
+  //    it is also recommended to use permanent TURN with short-lived
+  //    credentials from your own server. Without TURN vars, only STUN is used.)
+
+  /// TURN server URL (e.g. turn:turn.example.com:3478).
+  /// Empty by default — only STUN is used until you provide the dart-define.
+  static const String turnUrl = String.fromEnvironment('TURN_URL');
+
+  /// TURN username (static credentials of your TURN server).
+  static const String turnUsername = String.fromEnvironment('TURN_USERNAME');
+
+  /// TURN password/credential for your TURN server (SECRET).
+  static const String turnCredential =
+      String.fromEnvironment('TURN_CREDENTIAL');
+
+  static List<Map<String, dynamic>> _buildIceServers() {
+    final servers = <Map<String, dynamic>>[
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
-    ],
+    ];
+
+    // TURN (optional): only included if TURN_URL was provided via dart-define.
+    if (turnUrl.isNotEmpty) {
+      final urls = <String>[turnUrl];
+      // Also add the TLS variant (turns:) when the base is turn: — TURN/TLS
+      // passes through firewalls that block UDP 3478.
+      if (turnUrl.startsWith('turn:')) {
+        urls.add(turnUrl.replaceFirst('turn:', 'turns:'));
+      }
+      final turn = <String, dynamic>{'urls': urls};
+      if (turnUsername.isNotEmpty) turn['username'] = turnUsername;
+      if (turnCredential.isNotEmpty) turn['credential'] = turnCredential;
+      servers.add(turn);
+    }
+
+    return servers;
+  }
+
+  static final Map<String, dynamic> _peerConfig = {
+    'iceServers': _buildIceServers(),
     'sdpSemantics': 'unified-plan',
   };
 
   @override
   void initState() {
     super.initState();
+    CallScreen._activeInstances++;
 
     _pulseController = AnimationController(
       vsync: this,
@@ -144,7 +202,7 @@ class _CallScreenState extends State<CallScreen>
     if (widget.isOutgoing) {
       _startOutgoingCall();
     } else {
-      // Simu inayoingia: ita ringtone + vibration hadi accept/decline.
+      // Incoming call: play ringtone + vibration until accept/decline.
       _startRingAlerts();
     }
   }
@@ -157,7 +215,7 @@ class _CallScreenState extends State<CallScreen>
     final ok = await _prepareMediaAndPeer();
     if (!ok || !mounted) return;
 
-    // Jina/picha ya CALLER (kwa ajili ya incoming call screen ya mwenzake).
+    // The CALLER's name/photo (for the peer's incoming call screen).
     String callerName = 'Pacific user';
     String? callerAvatar;
     try {
@@ -176,8 +234,8 @@ class _CallScreenState extends State<CallScreen>
     } catch (_) {}
     _callerName = callerName;
 
-    // Tuma ring to channel ya faragha ya mwenzake, kisha jiunge na channel
-    // ya pamoja ya call tukingoja accept/offer/ice/end.
+    // Send the ring to the peer's private channel, then join the shared
+    // call channel while waiting for accept/offer/ice/end.
     final sent = await CallService.instance.sendRing(
       peerUid: widget.peerUid,
       callId: widget.callId,
@@ -195,8 +253,8 @@ class _CallScreenState extends State<CallScreen>
 
     await _joinCallChannel();
 
-    // Kama mwenzake hajajibu ndani ya sekunde 45 — call inaisha na
-    // mwenzake anapata "missed call" kwenye notifications zake.
+    // If the peer doesn't answer within 45 seconds — the call ends and
+    // the peer gets a "missed call" in their notifications.
     _noAnswerTimer = Timer(const Duration(seconds: 45), () {
       if (mounted && _phase != CallPhase.ongoing) {
         CallService.logMissedCall(
@@ -218,17 +276,17 @@ class _CallScreenState extends State<CallScreen>
     if (_accepted || _phase == CallPhase.ended) return;
     _accepted = true;
 
-    // Simu imejibiwa — simama ringtone na vibration.
+    // The call was answered — stop the ringtone and vibration.
     _stopRingAlerts();
 
     final ok = await _prepareMediaAndPeer();
     if (!ok || !mounted) return;
 
-    // Jiunge na channel KABLA ya kutuma accept ili offer isipotee.
+    // Join the channel BEFORE sending accept so the offer isn't lost.
     await _joinCallChannel();
     if (!mounted || _phase == CallPhase.ended) return;
     if (_channel == null) {
-      // Channel haikuweza ku-subscribe — call inaweza isifanye kazi.
+      // The channel could not subscribe — the call may not work.
       await _finishCall(sendEnd: false);
       return;
     }
@@ -236,8 +294,8 @@ class _CallScreenState extends State<CallScreen>
     await _signal('accept');
     setState(() => _phase = CallPhase.connecting);
 
-    // Retry accept mara 2 kwa 800ms — kama caller haja-subscribe bado
-    // au paketi moja imepotea, aipate nyingine.
+    // Retry accept twice at 800ms — if the caller hasn't subscribed yet
+    // or one packet was lost, they get another one.
     for (int i = 0; i < 2; i++) {
       await Future.delayed(const Duration(milliseconds: 800));
       if (!mounted || _phase == CallPhase.ongoing || _phase == CallPhase.ended) {
@@ -246,7 +304,7 @@ class _CallScreenState extends State<CallScreen>
       await _signal('accept');
     }
 
-    // Kama offer haifiki ndani ya sekunde 20 — call inaisha.
+    // If the offer doesn't arrive within 20 seconds — the call ends.
     _noAnswerTimer = Timer(const Duration(seconds: 20), () {
       if (mounted && _phase != CallPhase.ongoing) {
         _finishCall(sendEnd: true);
@@ -255,13 +313,13 @@ class _CallScreenState extends State<CallScreen>
   }
 
   Future<void> _decline() async {
-    // Simama ringtone na vibration.
+    // Stop the ringtone and vibration.
     _stopRingAlerts();
-    // Jiunge to haraka tu kutuma decline kisha toka.
+    // Join quickly just to send decline, then leave.
     if (_channel == null) await _joinCallChannel();
     await _signal('decline');
-    // Kumbukumbu to caller: "X did not answer simu yako" — inaonekana kwenye
-    // "Missed Calls" zake na haitafutwi; inaashiriwa imesomwa akishaiona.
+    // Log for the caller: "X did not answer your call" — it appears in
+    // their "Missed Calls" and is not deleted; marked read once seen.
     String myName = 'Pacific user';
     try {
       final row = await Supabase.instance.client
@@ -283,7 +341,7 @@ class _CallScreenState extends State<CallScreen>
   }
 
   // ============================================================
-  // SIGNALING — channel ya pamoja ya call
+  // SIGNALING — the shared call channel
   // ============================================================
 
   Future<void> _joinCallChannel() async {
@@ -298,8 +356,8 @@ class _CallScreenState extends State<CallScreen>
         .onBroadcast(event: 'decline', callback: (_) => _onPeerDeclined())
         .onBroadcast(event: 'end', callback: (_) => _onPeerEnded());
 
-    // Subiri status ya SUBSCRIBED — bila hii offer/answer/ice zinaweza
-    // kutumwa kabla channel haijaunganishwa na kupotea.
+    // Wait for the SUBSCRIBED status — otherwise offer/answer/ice could be
+    // sent before the channel is connected and get lost.
     final ok = await CallService.ensureSubscribed(channel);
     if (!ok) return;
     _channel = channel;
@@ -313,11 +371,11 @@ class _CallScreenState extends State<CallScreen>
     } catch (_) {}
   }
 
-  // Caller: mwenzake amebonyeza Accept — tuma WebRTC offer.
+  // Caller: the peer tapped Accept — send the WebRTC offer.
   Future<void> _onPeerAccepted() async {
     final pc = _pc;
     if (pc == null || _offerSent || _phase == CallPhase.ended) return;
-    // Guard dhidi ya duplicate 'accept' retries — tuma offer mara moja tu.
+    // Guard against duplicate 'accept' retries — send the offer only once.
     if (_phase == CallPhase.connecting) return;
     _noAnswerTimer?.cancel();
     _offerSent = true;
@@ -329,7 +387,7 @@ class _CallScreenState extends State<CallScreen>
     await _signal('offer', {'sdp': desc?.sdp, 'type': desc?.type});
   }
 
-  // Callee: tunapokea offer — tunaweka remote, tunatengeneza answer.
+  // Callee: we received the offer — set remote, create the answer.
   Future<void> _onOffer(dynamic payload) async {
     final pc = _pc;
     if (pc == null || payload is! Map) return;
@@ -337,6 +395,8 @@ class _CallScreenState extends State<CallScreen>
     if (sdp == null || sdp.isEmpty) return;
 
     await pc.setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
+    // ICE candidates that arrived before the offer — apply them now.
+    await _flushPendingIce();
     final answer = await pc.createAnswer({'offerToReceiveVideo': _isVideo});
     await pc.setLocalDescription(answer);
     final desc = await pc.getLocalDescription();
@@ -347,13 +407,15 @@ class _CallScreenState extends State<CallScreen>
     }
   }
 
-  // Caller: tunapokea answer ya callee.
+  // Caller: we received the callee's answer.
   Future<void> _onAnswer(dynamic payload) async {
     final pc = _pc;
     if (pc == null || payload is! Map) return;
     final sdp = payload['sdp']?.toString();
     if (sdp == null || sdp.isEmpty) return;
     await pc.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+    // ICE candidates that arrived before the answer — apply them now.
+    await _flushPendingIce();
   }
 
   Future<void> _onIce(dynamic payload) async {
@@ -361,13 +423,37 @@ class _CallScreenState extends State<CallScreen>
     if (pc == null || payload is! Map) return;
     final candidate = payload['candidate']?.toString();
     if (candidate == null || candidate.isEmpty) return;
+
+    final ice = RTCIceCandidate(
+      candidate,
+      payload['sdpMid']?.toString(),
+      (payload['sdpMLineIndex'] as num?)?.toInt(),
+    );
+
+    // A candidate can arrive before the remote description (offer/answer)
+    // is set — addCandidate fails then. Buffer it first.
+    final remoteDesc = await pc.getRemoteDescription();
+    if (remoteDesc == null || (remoteDesc.sdp ?? '').isEmpty) {
+      _pendingIce.add(ice);
+      return;
+    }
+
     try {
-      await pc.addCandidate(RTCIceCandidate(
-        candidate,
-        payload['sdpMid']?.toString(),
-        (payload['sdpMLineIndex'] as num?)?.toInt(),
-      ));
+      await pc.addCandidate(ice);
     } catch (_) {}
+  }
+
+  /// Applies the buffered ICE candidates (before the remote SDP was set).
+  Future<void> _flushPendingIce() async {
+    final pc = _pc;
+    if (pc == null || _pendingIce.isEmpty) return;
+    final queued = List<RTCIceCandidate>.from(_pendingIce);
+    _pendingIce.clear();
+    for (final ice in queued) {
+      try {
+        await pc.addCandidate(ice);
+      } catch (_) {}
+    }
   }
 
   void _onPeerDeclined() => _finishCall(sendEnd: false);
@@ -379,7 +465,7 @@ class _CallScreenState extends State<CallScreen>
 
   Future<bool> _prepareMediaAndPeer() async {
     try {
-      // 1. Ruhusa za mic/camera
+      // 1. Mic/camera permissions
       final permissions = await [
         Permission.microphone,
         if (_isVideo) Permission.camera,
@@ -392,7 +478,7 @@ class _CallScreenState extends State<CallScreen>
         return false;
       }
 
-      // 2. Media ya local (mic + camera to video call)
+      // 2. Local media (mic + camera for video calls)
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
         'video': _isVideo
@@ -406,9 +492,9 @@ class _CallScreenState extends State<CallScreen>
       _localRenderer.srcObject = _localStream;
       _localVideoReady = _localStream!.getVideoTracks().isNotEmpty;
 
-      // Audio routing default: video call -> speaker loud; audio call ->
-      // earpiece (kama simu ya kawaida). Mtumiaji anaweza kubadilisha
-      // kwenye kitufe cha "Speaker".
+      // Default audio routing: video call -> loud speaker; audio call ->
+      // earpiece (like a normal phone call). The user can change it
+      // with the "Speaker" button.
       _isSpeakerOn = _isVideo;
       await Helper.setSpeakerphoneOn(_isSpeakerOn);
 
@@ -439,9 +525,9 @@ class _CallScreenState extends State<CallScreen>
           _finishCall(sendEnd: true);
         }
       };
-      // Fallback: baadhi ya platforms onConnectionState haifanyi kazi
-      // kikamilifu — ICE connected/completed pia inamaanisha call iko
-      // "ongoing" na wawili wanaweza kuongea.
+      // Fallback: on some platforms onConnectionState does not work
+      // fully — ICE connected/completed also means the call is
+      // "ongoing" and both sides can talk.
       _pc!.onIceConnectionState = (state) {
         if (state ==
                 RTCIceConnectionState.RTCIceConnectionStateConnected ||
@@ -466,7 +552,7 @@ class _CallScreenState extends State<CallScreen>
   }
 
   // ============================================================
-  // LIFECYCLE YA CALL
+  // CALL LIFECYCLE
   // ============================================================
 
   void _goOngoing() {
@@ -548,6 +634,7 @@ class _CallScreenState extends State<CallScreen>
 
   @override
   void dispose() {
+    CallScreen._activeInstances--;
     _noAnswerTimer?.cancel();
     _durationTimer?.cancel();
     _stopRingAlerts();
@@ -559,9 +646,9 @@ class _CallScreenState extends State<CallScreen>
   }
 
   // ============================================================
-  // RING ALERTS — ringtone (inayotengenezwa kwa code, hakuna asset)
-  // + vibration loop kwa simu zinazoingia. Inaheshimu mapendeleo ya
-  // mtumiaji (sound/vibration) kutoka UserPrefs.
+  // RING ALERTS — ringtone (generated in code, no asset)
+  // + vibration loop for incoming calls. Respects the user's
+  // preferences (sound/vibration) from UserPrefs.
   // ============================================================
 
   void _startRingAlerts() {
@@ -595,8 +682,8 @@ class _CallScreenState extends State<CallScreen>
     } catch (_) {}
   }
 
-  /// Inatengeneza WAV (mono, 8kHz, 16-bit) yenye classic two-tone ring:
-  /// 400ms @ 850Hz + 200ms kimya + 400ms @ 1050Hz + 400ms kimya (x2 = 2.8s).
+  /// Builds a WAV (mono, 8kHz, 16-bit) with the classic two-tone ring:
+  /// 400ms @ 850Hz + 200ms silence + 400ms @ 1050Hz + 400ms silence (x2 = 2.8s).
   static Uint8List _buildRingtoneWav() {
     const sampleRate = 8000;
     const toneMs = 400;
@@ -790,10 +877,10 @@ class _CallScreenState extends State<CallScreen>
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Stack(
         children: [
-          // Remote video area — real WebRTC feed, placeholder kabla haijaunganisha
+          // Remote video area — real WebRTC feed, placeholder until connected
           Positioned.fill(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: AppRadius.xl,
               child: (_phase == CallPhase.ongoing &&
                       _remoteRenderer.srcObject != null)
                   ? RTCVideoView(
@@ -860,7 +947,7 @@ class _CallScreenState extends State<CallScreen>
               width: 96,
               height: 128,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: AppRadius.md,
                 gradient: _isVideoEnabled
                     ? LinearGradient(
                         colors: AppColors.primaryGradient,
@@ -883,7 +970,7 @@ class _CallScreenState extends State<CallScreen>
                 ],
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16.5),
+                borderRadius: AppRadius.md,
                 child: (_localVideoReady && _isVideoEnabled &&
                         _localRenderer.srcObject != null)
                     ? RTCVideoView(
@@ -1041,7 +1128,7 @@ class _CallScreenState extends State<CallScreen>
             active: _isMuted,
             onPressed: () {
               setState(() => _isMuted = !_isMuted);
-              // Tuma/zima audio track ya local.
+              // Enable/disable the local audio track.
               _localStream?.getAudioTracks().forEach((track) {
                 track.enabled = !_isMuted;
               });
@@ -1067,7 +1154,7 @@ class _CallScreenState extends State<CallScreen>
               active: _isVideoEnabled,
               onPressed: () {
                 setState(() => _isVideoEnabled = !_isVideoEnabled);
-                // Zima/tuma camera ya local.
+                // Enable/disable the local camera.
                 _localStream?.getVideoTracks().forEach((track) {
                   track.enabled = _isVideoEnabled;
                 });

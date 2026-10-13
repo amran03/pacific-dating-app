@@ -5,10 +5,12 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   file_selector_linux
+  flutter_volume_controller
   flutter_webrtc
   gtk
   record_linux
   url_launcher_linux
+  zego_express_engine_for_uikit
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

@@ -74,7 +74,7 @@ class GiftModel {
 
 // Gifts za Pacific — zimepangwa to tiers ili tray ionekane impressive:
 // bei inapanda, glow na styling zinapanda pia (TikTok-style).
-const List<GiftModel> pasificGifts = [
+const List<GiftModel> pacificGifts = [
   GiftModel(id: 'g1', name: 'Rose', emoji: '🌹', coinPrice: 10, tier: 'basic', glowColor: Color(0xFFFF4B6E)),
   GiftModel(id: 'g2', name: 'Coffee', emoji: '☕', coinPrice: 20, tier: 'basic', glowColor: Color(0xFFB07B4F)),
   GiftModel(id: 'g3', name: 'Chocolate', emoji: '🍫', coinPrice: 35, tier: 'premium', glowColor: Color(0xFF8B5A2B)),

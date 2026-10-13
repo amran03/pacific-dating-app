@@ -68,6 +68,13 @@ patch_notif2.py
 patch_notif3.py
 patch_notif4.py
 
+# Local PowerShell refactor scripts & build logs (local only)
+_convert_*.ps1
+_snack_*.ps1
+_snack_*.txt
+build_out.txt
+docs/.keep_tmp
+
 # Supabase CLI temp/state files
 supabase/.temp/
 

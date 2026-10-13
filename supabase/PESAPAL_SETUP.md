@@ -1,17 +1,17 @@
-# PesaPal (API 3.0) — Usanidi wa Pacific Dating App
+﻿# PesaPal (API 3.0) â€” Usanidi wa Pacific Dating App
 
 Malipo yote yanafanyika **server side** kwenye Supabase Edge Functions.
-`consumer_key` / `consumer_secret` HAZIPO kwenye Flutter na HAZIPO kwenye repo —
+`consumer_key` / `consumer_secret` HAZIPO kwenye Flutter na HAZIPO kwenye repo â€”
 ziko kwenye **Supabase Edge Function secrets** pekee.
 
 ```
 Flutter (lib/services/pesapal_service.dart)
-   └─ supabase.functions.invoke('create-pesapal-order')   [JWT ya mtumiaji]
-        └─ PesaPal API 3.0 (RequestToken → SubmitOrderRequest)
-   └─ PaymentWebViewScreen  → redirect_url ya PesaPal (webview_flutter)
-        └─ PesaPal → callback_url (pesapal-return)  +  IPN (pesapal-ipn)
-             └─ GetTransactionStatus → transactions = COMPLETED/FAILED
-                  └─ RPC pesapal_credit_coins() → users.coins += coins   [service_role]
+   â””â”€ supabase.functions.invoke('create-pesapal-order')   [JWT ya mtumiaji]
+        â””â”€ PesaPal API 3.0 (RequestToken â†’ SubmitOrderRequest)
+   â””â”€ PaymentWebViewScreen  â†’ redirect_url ya PesaPal (webview_flutter)
+        â””â”€ PesaPal â†’ callback_url (pesapal-return)  +  IPN (pesapal-ipn)
+             â””â”€ GetTransactionStatus â†’ transactions = COMPLETED/FAILED
+                  â””â”€ RPC pesapal_credit_coins() â†’ users.coins += coins   [service_role]
 ```
 
 ## Faili zilizoongezwa
@@ -21,12 +21,12 @@ Flutter (lib/services/pesapal_service.dart)
 | `supabase/migrations/20260917120000_pesapal_payments.sql` | jedwali `transactions`, RLS (select yake tu), `coins` kwenye profile, RPC `pesapal_credit_coins` (atomic + idempotent) |
 | `supabase/functions/_shared/pesapal.ts` | PesaPal API 3.0 client: `getToken` (cache dakika 4), `registerIPN`, `submitOrder`, `getTransactionStatus` (Deno `fetch`) |
 | `supabase/functions/_shared/order_status.ts` | thibitisha malipo + sasisha `transactions`/coins (inatumika na IPN na return) |
-| `supabase/functions/register-pesapal-ipn/index.ts` | hupigwa **mara moja** kwa mkono → inarudisha `ipn_id` |
+| `supabase/functions/register-pesapal-ipn/index.ts` | hupigwa **mara moja** kwa mkono â†’ inarudisha `ipn_id` |
 | `supabase/functions/create-pesapal-order/index.ts` | auth ya mtumiaji + kuunda order (TZS) + rekodi `PENDING` |
 | `supabase/functions/pesapal-ipn/index.ts` | webhook ya PesaPal (bila auth ya mtumiaji) |
 | `supabase/functions/pesapal-return/index.ts` | ukurasa wa HTML (callback_url) + fallback ya kuthibitisha malipo |
-| `lib/services/pesapal_service.dart` | Flutter → Edge Function |
-| `lib/features/profile/presentation/screens/payment_webview_screen.dart` | WebView ya PesaPal + kusubiri status (Realtime, kisha polling kila sekunde 2 × 6) |
+| `lib/services/pesapal_service.dart` | Flutter â†’ Edge Function |
+| `lib/features/profile/presentation/screens/payment_webview_screen.dart` | WebView ya PesaPal + kusubiri status (Realtime, kisha polling kila sekunde 2 Ã— 6) |
 
 ## 0. Mahitaji (mara moja)
 
@@ -38,7 +38,7 @@ supabase --version
 deno --version
 
 supabase login
-supabase link --project-ref <YOUR_PROJECT_REF>          # Project Settings → General → Reference ID
+supabase link --project-ref <YOUR_PROJECT_REF>          # Project Settings â†’ General â†’ Reference ID
 ```
 
 Kama hujawahi kuwa na `supabase/config.toml`:
@@ -50,7 +50,7 @@ supabase init        # inatengeneza supabase/config.toml
 > **Repo hii ina `supabase/config.toml`** yenye `verify_jwt = false` kwa
 > `pesapal-ipn`, `pesapal-return` na `register-pesapal-ipn`. Kama una faili
 > yako tayari, nakili sehemu za `[functions.*]` ndani yake. Hivyo
-> `supabase functions deploy` (bila jina la function) inatosha — hakuna haja
+> `supabase functions deploy` (bila jina la function) inatosha â€” hakuna haja
 > ya `--no-verify-jwt` kwa kila function.
 
 ## 1. Weka secrets (HAZIWEKWI kwenye git)
@@ -67,7 +67,7 @@ supabase secrets list
 ## 2. Deploy Edge Functions
 
 ```bash
-# (a) create-pesapal-order INAHITAJI JWT ya mtumiaji → deploy ya kawaida
+# (a) create-pesapal-order INAHITAJI JWT ya mtumiaji â†’ deploy ya kawaida
 supabase functions deploy create-pesapal-order
 
 # (b) webhook + callback + register: PesaPal/mkono huitisha bila JWT
@@ -116,7 +116,7 @@ Jibu: `{"ok":true,"ipn_id":"<IPN_ID>", ...}`
 
 ```bash
 supabase secrets set PESAPAL_IPN_ID=<IPN_ID>
-# Hakuna haja ya redeploy — function inasoma secret mpya mara moja.
+# Hakuna haja ya redeploy â€” function inasoma secret mpya mara moja.
 ```
 
 Kama function ilikwisha sajili URL hiyo (rerun), inarudisha `"reused":true` na `ipn_id` ile ile.
@@ -127,7 +127,7 @@ Kama function ilikwisha sajili URL hiyo (rerun), inarudisha `"reused":true` na `
 supabase db push                       # inatumia supabase/migrations/*
 ```
 
-Au: Supabase Dashboard → **SQL Editor** → paste faili la migration → Run.
+Au: Supabase Dashboard â†’ **SQL Editor** â†’ paste faili la migration â†’ Run.
 Kuona SQL ambayo itaendeshwa bila kuigusa database:
 ```bash
 supabase db push --dry-run
@@ -135,7 +135,7 @@ supabase db push --dry-run
 
 ## 5. Sandbox / Test
 
-- Production (default): `https://pay.pesapal.com/v3/api` — ipo kwenye
+- Production (default): `https://pay.pesapal.com/v3/api` â€” ipo kwenye
   `supabase/functions/_shared/pesapal.ts` (`PESAPAL_BASE_URL`).
 - Sandbox: `https://cybqa.pesapal.com/pesapalv3/api` (badilisha constant,
   tumia sandbox keys, deploy tena, na sajili IPN ya sandbox).
@@ -149,9 +149,9 @@ supabase functions invoke pesapal-ipn \
 ```
 
 `supabase secrets set ...` pamoja na `supabase functions deploy` pia zinaweza kufanyika
-kutoka Dashboard: **Edge Functions → Secrets**.
+kutoka Dashboard: **Edge Functions â†’ Secrets**.
 
-## 7. Flutter — mfano wa kuitisha `PesapalService`
+## 7. Flutter â€” mfano wa kuitisha `PesapalService`
 
 Umeunganishwa tayari kwenye `lib/features/profile/presentation/screens/buy_coins_screen.dart`:
 
@@ -195,7 +195,7 @@ Future<void> buyCoins(int coins) async {
     } else if (paid == false) {
       // onyesha "Malipo yameshindwa"
     } else {
-      // haijathibitishwa bado — coins zitaongezwa zikithibitishwa
+      // haijathibitishwa bado â€” coins zitaongezwa zikithibitishwa
     }
   } on PesapalException catch (e) {
     // e.message inaonyeshwa kwa mtumiaji
@@ -235,8 +235,8 @@ final row = await Supabase.instance.client
 - [x] `consumer_secret` ipo kwenye Supabase secrets pekee (Flutter/repo haina).
 - [x] `transactions`: RLS - `select` ya `auth.uid() = uid` tu; hakuna policies za
       insert/update `authenticated` (maandishi = `service_role` tu).
-- [x] Kiasi (TZS) KINAHESABIWA server side (`coins × 100`) - client haiaminiki.
-- [x] Coins zinaongezwa kwa `pesapal_credit_coins()` (atomic claim: PENDING → COMPLETED
+- [x] Kiasi (TZS) KINAHESABIWA server side (`coins Ã— 100`) - client haiaminiki.
+- [x] Coins zinaongezwa kwa `pesapal_credit_coins()` (atomic claim: PENDING â†’ COMPLETED
       + `credited = true`), kwa hiyo IPN ikipigwa mara nyingi coins haziongezwi mara mbili.
 - [x] Coins zinaongezwa tu baada ya `GetTransactionStatus` kurudisha `status_code = 1`.
 - [x] `register-pesapal-ipn` inalindwa na `x-admin-secret` / service-role bearer.

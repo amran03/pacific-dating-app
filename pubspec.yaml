@@ -27,7 +27,7 @@ dependencies:
   record: ^6.2.1
   audioplayers: ^6.0.0
   path_provider: ^2.1.4
-  permission_handler: ^11.3.1
+  permission_handler: ^12.0.1
 
   # Location
   geolocator: ^13.0.2
@@ -35,9 +35,18 @@ dependencies:
   # Real (system) notifications
   flutter_local_notifications: ^17.2.3
 
+  # Push delivery (background/killed) — Supabase-compatible via FCM data msgs
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.2.4
+
   # Real audio/video calls (WebRTC)
   flutter_webrtc: ^0.12.4
   webview_flutter: ^4.14.1
+  zego_uikit_prebuilt_call: ^4.24.5
+  # ZegoUIKitUser/ButtonIcon — direct import kwenye chat screen.
+  zego_uikit: ^2.28.23
+  # Call invitation signaling (direct dep — 1-on-1 voice/video invites)
+  zego_uikit_signaling_plugin: ^2.8.22
 
 dev_dependencies:
   flutter_test:

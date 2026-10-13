@@ -8,31 +8,49 @@ import 'call_service.dart';
 import 'user_prefs.dart';
 
 // ============================================================
-// NOTIFICATION SERVICE — arifa za ujumbe kama WhatsApp
+// NOTIFICATION SERVICE — system (tray) notifications + navigation.
 // ============================================================
 //
-// MTIRIRIKO (flow) wa arifa ya ujumbe:
-//   A anamtumia B ujumbe (individual_chat_screen._sendMessage)
-//     -> INSERT messages (chat kati ya A na B)
+// MESSAGE/MATCH FLOW (works with the app open):
+//   A sends B a message (individual_chat_screen._sendMessage)
+//     -> INSERT messages (chat between A and B)
 //     -> INSERT notifications (to_uid = B, from_uid = A)
-//   B (NotificationService hapa):
-//     -> stream ya notifications inaona row mpya (realtime)
-//     -> inaonyesha SYSTEM notification (tray) yenye jina la A
-//     -> B akigusa arifa -> IndividualChatScreen ya A inafunguka
+//   B (this service):
+//     -> the notifications stream sees the new row (realtime)
+//     -> shows a SYSTEM notification (tray) with A's name
+//     -> tapping it opens A's IndividualChatScreen
 //
-// BADGES / COUNT (icon ya Chat + chat list):
-//   Count inahesabiwa kutoka messages (receiver_id = mimi, seen = false).
-//   Ukifungua chat, _markMessagesAsSeen inaweka seen = true -> count
-//   inatoweka kiotomatiki. Arifa za tray zinafutwa na clearMessageNotificationsFor.
+// PUSH FLOW (works backgrounded / killed — needs Firebase, see below):
+//   A sends B a message/call
+//     -> INSERT notifications row (same as above)
+//     -> Supabase Edge Function `send-push` fans out an FCM data message
+//        to every fcm_token stored for B (users.fcm_token)
+//   B's device (PushService, registered in main.dart BEFORE runApp):
+//     -> FirebaseMessaging.onBackgroundMessage fires even when killed
+//     -> shows the SAME local notification channels as the realtime path
+//     -> tapping routes via NotificationService.handlePushTap
 //
-// MUHIMU — kwa nini stream HAINA .eq() filters:
-//   `.stream().eq('to_uid', uid)` kwenye supabase-dart inaongeza filter
-//   kama query param ya realtime. Kwa DB/columns za zamani au realtime
-//   iliyosanidiwa tofauti, filter hii inaweza kurudisha rows 0 milele
-//   (ndiyo chanzo cha awali cha "messages haziji kama notification").
-//   Badala yake tunasikiliza rows 50 za mwisho kisha tunachuja
-//   client-side: to_uid == mimi && read == false && fresh. Hii daima
-//   inafanya kazi bila kujali realtime config ya server.
+// FIREBASE SETUP (one-time, in the Firebase console):
+//   1. Create a Firebase project, add the Android app with
+//      applicationId from android/app/build.gradle.kts.
+//   2. Download google-services.json into android/app/.
+//   3. Add the google-services plugin (see android docs in this repo).
+//   4. Deploy supabase/functions/send-push with FCM_PROJECT_ID,
+//      FCM_CLIENT_EMAIL, FCM_PRIVATE_KEY secrets.
+//   Until then, everything degrades gracefully: foreground realtime
+//   notifications keep working; only killed-state delivery needs FCM.
+//
+// BADGES / COUNT (chat icon + chat list):
+//   Count is computed from messages (receiver_id = me, seen = false).
+//   Opening a chat marks seen = true so the count clears automatically.
+//   Tray notifications are cleared by clearMessageNotificationsFor.
+//
+// WHY the stream has NO .eq() filters:
+//   `.stream().eq('to_uid', uid)` on older supabase-dart versions adds the
+//   filter as a realtime query param that can return 0 rows forever when
+//   the server realtime config differs. Instead we listen to the last 50
+//   rows and filter client-side: to_uid == me && read == false && fresh.
+//   This always works regardless of the server realtime config.
 class NotificationService {
   NotificationService._internal();
   static final NotificationService instance = NotificationService._internal();
@@ -41,8 +59,8 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
-  bool _firstSnapshotReceived = false; // snapshot ya kwanza = historia
-  bool _userEnabled = true; // switch ya mtumiaji (users.notifications_enabled)
+  bool _firstSnapshotReceived = false; // first snapshot = history
+  bool _userEnabled = true; // the user's switch (users.notifications_enabled)
   StreamSubscription<List<Map<String, dynamic>>>? _subscription;
   final Set<String> _seenIds = {};
   String? _pendingLaunchPayload;
@@ -61,7 +79,37 @@ class NotificationService {
   /// user (users.notifications_enabled).
   void setUserEnabled(bool enabled) => _userEnabled = enabled;
 
+  /// Public tap router for FCM pushes (PushService) and any other
+  /// background entry point. Routes chat payloads to the chat opener
+  /// and call payloads to the pending-call slot consumed by the UI.
+  void handlePushTap(String payload) => _handleNotificationTap(payload);
+
+  /// FCM foreground path: show a chat/message banner through the same
+  /// general channel used by the realtime listener.
+  Future<void> showFromPush({
+    required String title,
+    required String body,
+    required String payload,
+  }) async {
+    // Mzunguko wa FCM wa mbele (foreground) — heshimu switch ya
+    // Settings > Notifications papo hapo (UserPrefs ni cache halisi).
+    if (!UserPrefs.instance.notificationsEnabled) return;
+    await showNotification(
+      id: payload.hashCode,
+      title: title,
+      body: body,
+      payload: payload,
+    );
+  }
+
   Future<void> _fetchUserPreference(String uid) async {
+    // Njia ya haraka: UserPrefs tayari ina cache ya notifications_enabled
+    // (imebadilishwa mara moja na Settings) — hakuna safari ya DB kila
+    // snapshot. DB ni fallback pale cache bado haijapakia.
+    if (UserPrefs.instance.isLoaded) {
+      _userEnabled = UserPrefs.instance.notificationsEnabled;
+      return;
+    }
     try {
       final row = await Supabase.instance.client
           .from('users')
@@ -77,6 +125,29 @@ class NotificationService {
   /// Channel ID lazima ilingane na inayotumika kwenye showNotification
   /// (Android 8+: arifa bila channel iliyopo haionekani kabisa).
   static const String _channelId = 'pacific_general';
+
+  // ---- High-priority incoming-call channel (full-screen intent) ----
+  static const String _callChannelId = 'pacific_calls_high_priority';
+  bool _callChannelReady = false;
+
+  Future<void> _ensureCallChannel() async {
+    if (_callChannelReady) return;
+    try {
+      const channel = AndroidNotificationChannel(
+        _callChannelId,
+        'Incoming calls',
+        description: 'Rings for incoming voice and video calls.',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+      _callChannelReady = true;
+    } catch (_) {}
+  }
 
   Future<void> _ensureChannel() async {
     if (_channelReady) return;
@@ -111,11 +182,18 @@ class NotificationService {
         iOS: iosSettings,
       );
 
-      // Kugusa arifa inapokelewa hapa — tunaipeleka kwenye screen husika.
+      // Notification taps are routed to the relevant screen here.
       await _plugin.initialize(
         settings,
         onDidReceiveNotificationResponse: _onNotificationResponse,
+        onDidReceiveBackgroundNotificationResponse:
+            _onBackgroundNotificationResponse,
       );
+
+      // Pre-create both channels so Android 8+ always has them, and ask
+      // for permission on Android 13+ and iOS.
+      await _ensureChannel();
+      await _ensureCallChannel();
 
       // Ask for permission on Android 13+ and iOS.
       await _plugin
@@ -278,7 +356,7 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
         showWhen: true,
-        // Mapendeleo ya mtumiaji (Profile > Notifications):
+        // User preferences (Profile > Notifications):
         playSound: UserPrefs.instance.soundEnabled,
         enableVibration: UserPrefs.instance.vibrationEnabled,
       );
@@ -333,12 +411,206 @@ class NotificationService {
     } catch (_) {}
   }
 
+  // ---- Pending incoming call (rings from another app / killed) ----
+  static ({String callId, bool isVideo, String name, String uid})?
+      _pendingIncomingCall;
+
+  /// Consumed once by the UI layer to open CallScreen as callee.
+  static ({String callId, bool isVideo, String name, String uid})?
+      consumePendingIncomingCall() {
+    final c = _pendingIncomingCall;
+    _pendingIncomingCall = null;
+    return c;
+  }
+
+  /// Parses `call|<callId>|<audio|video>|<callerName>|<callerUid>`.
+  static ({String callId, bool isVideo, String name, String uid})?
+      parseCallPayload(String payload) {
+    final parts = payload.split('|');
+    if (parts.length < 5 || parts[0] != 'call') return null;
+    if (parts[1].isEmpty) return null;
+    return (
+      callId: parts[1],
+      isVideo: parts[2] == 'video',
+      name: parts[3].isEmpty ? 'Unknown' : parts[3],
+      uid: parts[4],
+    );
+  }
+
+  int _callNotifId(String callId) => callId.hashCode;
+
+  /// WhatsApp-style ringing notification: max importance, full-screen
+  /// intent (rings over other apps / lock screen), sound + vibration,
+  /// with Answer / Decline actions routing into CallScreen.
+  Future<void> showIncomingCall({
+    required String title,
+    required String body,
+    required String payload,
+  }) async {
+    final call = parseCallPayload(payload);
+    if (call == null) return;
+    _pendingIncomingCall = call;
+    if (!_initialized) return;
+    await _ensureCallChannel();
+    try {
+      final android = AndroidNotificationDetails(
+        _callChannelId,
+        'Incoming calls',
+        channelDescription: 'Rings for incoming voice and video calls.',
+        importance: Importance.max,
+        priority: Priority.high,
+        category: AndroidNotificationCategory.call,
+        fullScreenIntent: true,
+        playSound: true,
+        enableVibration: true,
+        autoCancel: false,
+        ongoing: true,
+        actions: const <AndroidNotificationAction>[
+          AndroidNotificationAction(
+            'answer_call',
+            'Answer',
+            showsUserInterface: true,
+            cancelNotification: true,
+          ),
+          AndroidNotificationAction(
+            'decline_call',
+            'Decline',
+            showsUserInterface: true,
+            cancelNotification: true,
+          ),
+        ],
+      );
+      final details = NotificationDetails(android: android);
+      await _plugin.show(
+        _callNotifId(call.callId),
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+  /// Cancels the ringing notification once answered / declined / timed out.
+  Future<void> cancelIncomingCall(String callId) async {
+    try {
+      await _plugin.cancel(_callNotifId(callId));
+    } catch (_) {}
+  }
+
+
+  /// Background-isolate entry for incoming-call pushes (FCM handler has
+  /// no Supabase access — it just shows the ringing notification; tapping
+  /// it reopens the app where the pending-call slot takes over).
+  static Future<void> showIncomingCallBackground({
+    required String title,
+    required String body,
+    required String payload,
+  }) async {
+    try {
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/launcher_icon');
+      const settings = InitializationSettings(android: androidSettings);
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.initialize(settings);
+      const channel = AndroidNotificationChannel(
+        _callChannelId,
+        'Incoming calls',
+        description: 'Rings for incoming voice and video calls.',
+        importance: Importance.max,
+        playSound: true,
+        enableVibration: true,
+      );
+      await plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+      const android = AndroidNotificationDetails(
+        _callChannelId,
+        'Incoming calls',
+        channelDescription: 'Rings for incoming voice and video calls.',
+        importance: Importance.max,
+        priority: Priority.high,
+        category: AndroidNotificationCategory.call,
+        fullScreenIntent: true,
+        playSound: true,
+        enableVibration: true,
+        autoCancel: false,
+        ongoing: true,
+        actions: <AndroidNotificationAction>[
+          AndroidNotificationAction(
+            'answer_call',
+            'Answer',
+            showsUserInterface: true,
+            cancelNotification: true,
+          ),
+          AndroidNotificationAction(
+            'decline_call',
+            'Decline',
+            showsUserInterface: true,
+            cancelNotification: true,
+          ),
+        ],
+      );
+      const details = NotificationDetails(android: android);
+      await plugin.show(
+        payload.hashCode,
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+  /// Background-isolate entry for chat/message pushes.
+  static Future<void> showChatMessageBackground({
+    required String title,
+    required String body,
+    required String payload,
+  }) async {
+    try {
+      const androidSettings =
+          AndroidInitializationSettings('@mipmap/launcher_icon');
+      const settings = InitializationSettings(android: androidSettings);
+      final plugin = FlutterLocalNotificationsPlugin();
+      await plugin.initialize(settings);
+      const channel = AndroidNotificationChannel(
+        _channelId,
+        'General Notifications',
+        description: 'Matches, messages, gifts and coins',
+        importance: Importance.high,
+      );
+      await plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(channel);
+      const android = AndroidNotificationDetails(
+        _channelId,
+        'General Notifications',
+        channelDescription: 'Matches, messages, gifts and coins',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+      );
+      const details = NotificationDetails(android: android);
+      await plugin.show(
+        payload.hashCode,
+        title,
+        body,
+        details,
+        payload: payload,
+      );
+    } catch (_) {}
+  }
+
+
   // ============================================================
-  // TAP / DEEP-LINK — kugusa arifa kunafungua screen husika
+  // TAP / DEEP-LINK — tapping a notification opens its screen.
   // ============================================================
 
-  /// App ilifunguliwa kwa kugusa arifa (app ilikuwa imezimwa): navigator
-  /// huwa haija tayari mara moja — jaribu hadi iwe tayari kisha funua.
+  /// The app was opened by tapping a notification while fully closed:
+  /// the navigator is not ready immediately — retry until it is.
   Future<void> _processPendingLaunchPayload() async {
     for (int i = 0; i < 20; i++) {
       await Future.delayed(const Duration(milliseconds: 500));
@@ -353,12 +625,31 @@ class NotificationService {
   void _onNotificationResponse(NotificationResponse response) {
     final payload = response.payload;
     if (payload == null || payload.isEmpty) return;
-    _handleNotificationTap(payload);
+    _handleNotificationTap(payload, actionId: response.actionId);
   }
 
-  /// Mtumiaji aligusa arifa — peleka kwenye chat husika ('message' na
-  /// 'missed_call'); types nyingine zinafungua app tu.
-  void _handleNotificationTap(String payload) {
+  /// Background-tap entry (plugin callback while the app process was
+  /// dead). Routes the same way as the foreground tap.
+  static void _onBackgroundNotificationResponse(
+    NotificationResponse response,
+  ) {
+    final payload = response.payload;
+    if (payload == null || payload.isEmpty) return;
+    NotificationService.instance._handleNotificationTap(
+      payload,
+      actionId: response.actionId,
+    );
+  }
+
+  /// A notification was tapped — route chat payloads ('message' /
+  /// 'missed_call') to the chat opener and call payloads ('call|…')
+  /// to the pending-call slot consumed by the UI layer so Answer /
+  /// Decline from the notification lands in CallScreen.
+  void _handleNotificationTap(String payload, {String? actionId}) {
+    if (payload.startsWith('call|')) {
+      _handleCallTap(payload, actionId: actionId);
+      return;
+    }
     final parts = payload.split('|');
     final String type = parts.isNotEmpty ? parts[0] : '';
     final String fromUid = parts.length > 1 ? parts[1] : '';
@@ -366,10 +657,43 @@ class NotificationService {
     if (fromUid.isEmpty) return;
     if (type != 'message' && type != 'missed_call') return;
 
-    final context = CallService.instance.navigatorKey.currentContext;
-    if (context == null || !context.mounted) return;
+    // Stash BILA kizuizi cha navigator context: `_openChatFromNotification`
+    // haitegemei context — inachukua avatar tu. Kizuizi cha zamani
+    // kilipoteza tap za barua pepe wakati app bado iko kwenye splash/
+    // cold-start (context bado haikuwa tayari). Mzunguko wa PresenceTracker
+    // ndio hutafuta stash hii na kufungua chat app ikiwa tayari.
+    unawaited(_openChatFromNotification(fromUid, fromName));
+  }
 
-    unawaited(_openChatFromNotification(context, fromUid, fromName));
+  /// A ringing-call notification was tapped (or an Answer/Decline action
+  /// pressed): stash the call for the UI layer and clear the ring. Plain
+  /// taps and 'answer_call' open CallScreen as callee (which sends
+  /// 'accept' and starts media so audio/video is already connecting);
+  /// 'decline_call' only logs a missed call for the caller.
+  void _handleCallTap(String payload, {String? actionId}) {
+    final call = parseCallPayload(payload);
+    if (call == null) return;
+    unawaited(cancelIncomingCall(call.callId));
+    if (actionId == 'decline_call') {
+      // Mtumiaji alikataa — ondoa stash ili consumer (PresenceTracker)
+      // isifungue CallScreen baada ya kukataa.
+      _pendingIncomingCall = null;
+      try {
+        final me = Supabase.instance.client.auth.currentUser;
+        unawaited(CallService.logMissedCall(
+          toUid: me?.id ?? '',
+          fromUid: call.uid,
+          fromName: call.name,
+          isVideo: call.isVideo,
+          declined: true,
+        ));
+      } catch (_) {}
+      return;
+    }
+    // Plain tap or 'answer_call' — the UI consumes this and pushes
+    // CallScreen (incoming). showIncomingCall already stashed it; keep
+    // the stash fresh in case this tap arrived first.
+    _pendingIncomingCall = call;
   }
 
   /// Consumer wa pending chat launch — inaitwa na UI layer (k.m. PresenceTracker)
@@ -388,7 +712,6 @@ class NotificationService {
   }
 
   Future<void> _openChatFromNotification(
-    BuildContext context,
     String peerUid,
     String peerName,
   ) async {

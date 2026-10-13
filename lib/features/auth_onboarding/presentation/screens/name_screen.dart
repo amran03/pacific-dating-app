@@ -3,6 +3,7 @@ import '../../../../core/constants/app_color.dart';
 import '../../../../core/services/validation_service.dart';
 import '../../../../core/services/core_error_service.dart';
 import 'birthday_screen.dart'; // Tutaitengeneza hatua inayofuata
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class NameScreen extends StatefulWidget {
   const NameScreen({super.key});
@@ -65,11 +66,11 @@ class _NameScreenState extends State<NameScreen> {
                   filled: true,
                   fillColor: AppColors.inputFill,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: AppRadius.md,
                     borderSide: BorderSide.none,
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: AppRadius.md,
                     borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                   ),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
@@ -101,7 +102,7 @@ class _NameScreenState extends State<NameScreen> {
                     backgroundColor: AppColors.primary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: AppRadius.xl,
                     ),
                   ),
                   child: const Text(

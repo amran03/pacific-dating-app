@@ -9,6 +9,8 @@ import 'package:pacific_dating_app/core/services/storage_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 import 'package:pacific_dating_app/screens/pacific_launch_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class SetupAccountScreen extends StatefulWidget {
   final String phoneNumber;
@@ -99,7 +101,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.xl),
           title: Text(
             "You are $age? 🎂",
             textAlign: TextAlign.center,
@@ -119,7 +121,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: _themeColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.card),
               ),
               onPressed: () {
                 Navigator.pop(context);
@@ -270,14 +272,9 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   }
 
   void _showSnackBar(String message, {Color color = Colors.redAccent}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: color,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    // LEGACY name kept for the call sites above — now routes to the
+    // animated overlay notification (no ScaffoldMessenger anywhere).
+    showAppNotification(context, message, color: color);
   }
 
   @override
@@ -304,7 +301,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               color: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.sm,
                 child: LinearProgressIndicator(
                   value: (_currentStep + 1) / _totalSteps,
                   backgroundColor: Colors.grey.shade200,
@@ -351,7 +348,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: _themeGradient,
-                    borderRadius: BorderRadius.circular(30),
+                    borderRadius: AppRadius.xl,
                     boxShadow: [
                       BoxShadow(
                         color: _themeColor.withValues(alpha: 0.4),
@@ -364,7 +361,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.xl),
                     ),
                     onPressed: _isSaving ? null : _nextStep,
                     child: _isSaving
@@ -428,8 +425,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             filled: true,
             fillColor: Colors.white,
             prefixIcon: Icon(Icons.person_outline_rounded, color: _themeColor),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: _themeColor, width: 2)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide(color: _themeColor, width: 2)),
+            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide.none),
           ),
         ),
       ),
@@ -438,8 +435,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildBirthdayStep() {
     return _buildStepLayout(
-      title: "Tarehe ya Kuzaliwa 🎂",
-      subtitle: "We use this date to calculate your age. Watu wengine wataona umri wako pekee (mfano: 24) na sio tarehe kamili ya kuzaliwa.",
+      title: "Date of Birth 🎂",
+      subtitle: "We use this date to calculate your age. Others will only see your age (e.g., 24), never your exact date of birth.",
       child: InkWell(
         onTap: () async {
           DateTime? picked = await showDatePicker(
@@ -458,7 +455,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             children: [
               Text(
                 _selectedBirthDate == null
-                    ? "Bonyeza hapa kuchagua Tarehe"
+                    ? "Tap here to pick a date"
                     : "${_selectedBirthDate!.day} / ${_selectedBirthDate!.month} / ${_selectedBirthDate!.year}",
                 style: TextStyle(fontSize: 17, color: _selectedBirthDate == null ? Colors.grey.shade500 : AppColors.textPrimary, fontWeight: FontWeight.bold),
               ),
@@ -500,7 +497,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: isSelected ? _themeColor : Colors.transparent, width: 2.5),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: AppRadius.card,
           boxShadow: [
             BoxShadow(
               color: isSelected ? _themeColor.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.06),
@@ -532,7 +529,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             height: 280,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: AppRadius.xl,
               boxShadow: [
                 BoxShadow(
                   color: _themeColor.withValues(alpha: 0.2),
@@ -542,7 +539,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               ],
             ),
             child: _profileImage != null
-                ? ClipRRect(borderRadius: BorderRadius.circular(28), child: Image.file(_profileImage!, fit: BoxFit.cover))
+                ? ClipRRect(borderRadius: AppRadius.xl, child: Image.file(_profileImage!, fit: BoxFit.cover))
                 : Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -577,8 +574,8 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
             hintStyle: TextStyle(color: Colors.grey.shade400),
             filled: true,
             fillColor: Colors.white,
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: _themeColor, width: 2)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide(color: _themeColor, width: 2)),
+            enabledBorder: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide.none),
           ),
         ),
       ),
@@ -603,7 +600,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
 
   Widget _buildRelationshipGoalStep() {
     return _buildStepLayout(
-      title: "Unatafuta Nini Hapa? 🎯",
+      title: "What Are You Looking For? 🎯",
       subtitle: "State your intention clearly so you can be matched with people who share the same goals.",
       child: Column(
         children: _relationshipGoals.map((goal) {
@@ -654,7 +651,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
               padding: const EdgeInsets.all(28.0),
               decoration: BoxDecoration(
                 gradient: _themeGradient,
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: AppRadius.xl,
                 boxShadow: [
                   BoxShadow(color: _themeColor.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 10)),
                 ],
@@ -664,14 +661,14 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
                   Stack(
                     alignment: Alignment.center,
                     children: [
-                      Container(width: 100, height: 100, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: _profileImage != null ? ClipRRect(borderRadius: BorderRadius.circular(50), child: Image.file(_profileImage!, fit: BoxFit.cover)) : Icon(Icons.person, size: 60, color: _themeColor)),
+                      Container(width: 100, height: 100, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: _profileImage != null ? ClipRRect(borderRadius: AppRadius.pill, child: Image.file(_profileImage!, fit: BoxFit.cover)) : Icon(Icons.person, size: 60, color: _themeColor)),
                       Positioned(bottom: 0, right: 0, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle), child: const Icon(Icons.check, color: Colors.white, size: 20))),
                     ],
                   ),
                   const SizedBox(height: 16),
                   Text("Welcome, ${_nameController.text.isNotEmpty ? _nameController.text : 'Guest'}! 🎉", textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.white)),
                   const SizedBox(height: 8),
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)), child: const Text("Your Profile Is 100% Ready", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: AppRadius.card), child: const Text("Your Profile Is 100% Ready", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13))),
                 ],
               ),
             ),
@@ -710,7 +707,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: isSelected ? _themeColor : Colors.transparent, width: 2.5),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppRadius.card,
           boxShadow: [
             BoxShadow(color: isSelected ? _themeColor.withValues(alpha: 0.18) : Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 5)),
           ],
@@ -778,7 +775,7 @@ class _SetupAccountScreenState extends State<SetupAccountScreen> {
   BoxDecoration _buildBoxDecoration() {
     return BoxDecoration(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: AppRadius.card,
       boxShadow: [
         BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 15, offset: const Offset(0, 5)),
       ],

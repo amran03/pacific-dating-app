@@ -1,15 +1,16 @@
 /**
- * create-pesapal-order — Flutter (lib/services/pesapal_service.dart) inaita hii
- * kupitia supabase.functions.invoke('create-pesapal-order', body: {...}).
+ * create-pesapal-order — called by Flutter (lib/services/pesapal_service.dart)
+ * via supabase.functions.invoke('create-pesapal-order', body: {...}).
  * ---------------------------------------------------------------------------
- * 1. Inathibitisha JWT ya mtumiaji (auth required — deploy bila --no-verify-jwt).
- * 2. Inahesabu kiasi kwa SERVER SIDE (1 coin = 100 TZS) — hatutumii amount ya client.
- * 3. Inaunda order kwa PesaPal (currency: TZS).
- * 4. Inahifadhi rekodi ya PENDING kwenye "transactions" kwa service_role.
+ * 1. Verifies the user's JWT (auth required — deploy WITHOUT --no-verify-jwt).
+ * 2. Calculates the amount SERVER SIDE (1 coin = 25 TZS) — the client's
+ *    amount is never trusted.
+ * 3. Creates the order with PesaPal (currency: TZS).
+ * 4. Stores a PENDING record in "transactions" using service_role.
  *
- * Inarudisha: { redirectUrl, orderId, orderTrackingId, amount, coins, currency }
+ * Returns: { redirectUrl, orderId, orderTrackingId, amount, coins, currency }
  *
- * MUHIMU: consumer_secret ipo kwenye Supabase secrets pekee.
+ * IMPORTANT: consumer_secret lives only in Supabase secrets.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -24,7 +25,7 @@ import {
   supabaseUrl,
 } from "../_shared/pesapal.ts";
 
-/** 1 Coin = 25 TZS — LAZIMA ilingane na kCoinRateTzs kwenye pesapal_service.dart */
+/** 1 Coin = 25 TZS — MUST match kCoinRateTzs in pesapal_service.dart */
 const COIN_RATE_TZS = 25;
 const MIN_COINS = 10;
 const MAX_COINS = 200000;
@@ -46,11 +47,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ---------- 1) Thibitisha JWT ya mtumiaji ----------
+    // ---------- 1) Verify the user's JWT ----------
     const authHeader = req.headers.get("Authorization") ?? "";
     if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return jsonResponse(
-        { error: "Missing Authorization header. Sign in kwanza." },
+        { error: "Missing Authorization header. Please sign in first." },
         401,
       );
     }
@@ -61,7 +62,7 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: "Empty bearer token." }, 401);
     }
 
-    // Anon key ni ya gateway tu; JWT ya mtumiaji inathibitishwa na GoTrue.
+    // The anon key is only for the gateway; the user's JWT is verified by GoTrue.
     const anonKey = (Deno.env.get("SUPABASE_ANON_KEY") ??
       Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ??
       serviceRoleKey()).trim();
@@ -83,12 +84,12 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
-    // Service-role client: inapita RLS kwa maandishi ya "transactions".
+    // Service-role client: bypasses RLS for writing to "transactions".
     const admin = createClient(url, serviceRoleKey(), {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // ---------- 2) Soma na thibitisha body ----------
+    // ---------- 2) Read and validate the body ----------
     const body = (await req.json().catch(() => ({}))) as CreateOrderBody;
     const requestedCoins = Number(body.coins ?? 0);
     const requestedAmount = Number(body.amount ?? 0);
@@ -102,7 +103,7 @@ Deno.serve(async (req) => {
 
     if (coins < MIN_COINS || coins > MAX_COINS) {
       return jsonResponse(
-        { error: `Coins lazima ziwe kati ya ${MIN_COINS} na ${MAX_COINS}.` },
+        { error: `Coins must be between ${MIN_COINS} and ${MAX_COINS}.` },
         400,
       );
     }
@@ -110,7 +111,7 @@ Deno.serve(async (req) => {
     // Kiasi KINAHESABIWA hapa (server side).
     const amount = coins * COIN_RATE_TZS;
 
-    // ---------- 3) Taarifa za bili (email + phone ni LAZIMA kwa PesaPal) ----------
+    // ---------- 3) Billing details (email + phone are REQUIRED by PesaPal) ----------
     const profile = await admin
       .from("users")
       .select("phone_number, auth_email, name")
@@ -128,13 +129,13 @@ Deno.serve(async (req) => {
 
     if (!email.includes("@")) {
       return jsonResponse(
-        { error: "Barua pepe (email) ni lazima kwa malipo ya PesaPal." },
+        { error: "A valid email address is required for PesaPal payments." },
         400,
       );
     }
     if (!phone) {
       return jsonResponse(
-        { error: "Namba ya simu ni lazima kwa malipo ya PesaPal." },
+        { error: "A phone number is required for PesaPal payments." },
         400,
       );
     }
@@ -145,7 +146,7 @@ Deno.serve(async (req) => {
       encodeURIComponent(orderId)
     }`;
 
-    // ---------- 4) Unda order kwa PesaPal ----------
+    // ---------- 4) Create the order with PesaPal ----------
     const { consumerKey, consumerSecret } = pesapalCredentials();
     const token = await getToken(consumerKey, consumerSecret);
 
@@ -167,13 +168,13 @@ Deno.serve(async (req) => {
 
     if (!pesapalOrder.redirect_url || !pesapalOrder.order_tracking_id) {
       throw new Error(
-        `PesaPal haikurudisha redirect_url/order_tracking_id: ${
+        `PesaPal did not return redirect_url/order_tracking_id: ${
           JSON.stringify(pesapalOrder)
         }`,
       );
     }
 
-    // ---------- 5) Hifadhi rekodi ya PENDING (service_role -> inapita RLS) ----------
+    // ---------- 5) Store the PENDING record (service_role -> bypasses RLS) ----------
     const { error: insertError } = await admin.from("transactions").insert({
       id: orderId,
       uid: user.id,
@@ -189,11 +190,11 @@ Deno.serve(async (req) => {
 
     if (insertError) {
       throw new Error(
-        `Imeshindwa kuhifadhi transaction: ${insertError.message}`,
+        `Failed to store the transaction: ${insertError.message}`,
       );
     }
 
-    // ---------- 6) Rudisha kwa Flutter ----------
+    // ---------- 6) Return to Flutter ----------
     return jsonResponse({
       redirectUrl: pesapalOrder.redirect_url,
       orderId,
@@ -220,7 +221,7 @@ function cleanText(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/** PesaPal inataka namba ya simu bila country code (mf. 0755123456). */
+/** PesaPal expects the phone number without the country code (e.g. 0755123456). */
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/[^\d]/g, "");
   if (!digits) return "";

@@ -5,23 +5,24 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/services/pesapal_service.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
-/// Hatua za malipo yanayoonyeshwa kwa mtumiaji.
+/// Payment stages shown to the user.
 enum _PaymentStage { loading, paying, confirming, success, failed, unknown }
 
-/// Skrini ya kulipia kupitia PesaPal kwenye WebView.
+/// Screen for paying through PesaPal in a WebView.
 ///
-/// Mtiririko:
-///   1. `create-pesapal-order` (Edge Function) inarudisha redirectUrl + orderId.
-///   2. Skrini hii inafungua redirectUrl kwenye WebView -> mtumiaji analipa.
-///   3. PesaPal inamrudisha mtumiaji kwenye callback_url yetu, ambayo ina
-///      "pesapal-return" -> tunaanza kusubiri hali halisi ya malipo.
-///   4. Hali inasomwa kutoka jedwali la "transactions" (Realtime; kama
-///      Realtime haipatikani -> polling kila sekunde 2, mara 6).
+/// Flow:
+///   1. `create-pesapal-order` (Edge Function) returns redirectUrl + orderId.
+///   2. This screen opens the redirectUrl in a WebView -> the user pays.
+///   3. PesaPal redirects the user to our callback_url, which contains
+///      "pesapal-return" -> we start waiting for the actual payment status.
+///   4. The status is read from the "transactions" table (Realtime; if
+///      Realtime is unavailable -> polling every 3 seconds, 20 times).
 ///   5. `Navigator.pop(context, true | false | null)`:
-///        true  = COMPLETED (coins zimeongezwa)
+///        true  = COMPLETED (coins were credited)
 ///        false = FAILED
-///        null  = mtumiaji amefunga / bado haijathibitishwa
+///        null  = the user closed it / not confirmed yet
 class PaymentWebViewScreen extends StatefulWidget {
   const PaymentWebViewScreen({
     super.key,
@@ -79,8 +80,8 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
             if (url != null) _handleUrl(url);
           },
           onWebResourceError: (error) {
-            // PesaPal inatumia redirects nyingi; makosa ya sub-resources
-            // (mfano picha) hayapaswi kumzuia mtumiaji.
+            // PesaPal uses many redirects; sub-resource errors
+            // (e.g. images) should not block the user.
             if (error.isForMainFrame == true &&
                 mounted &&
                 !_returnDetected &&
@@ -96,8 +97,8 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
       )
       ..loadRequest(Uri.parse(widget.redirectUrl));
 
-    // Usalama: kama callback haitokei (mtu amefunga browser), angalia hali
-    // ya malipo baada ya sekunde 90 kabla ya kuachia skrini.
+    // Safety: if the callback never happens (e.g. the browser was closed),
+    // check the payment status after 90 seconds before releasing the screen.
     _watchdog = Timer(const Duration(seconds: 90), () {
       if (!_returnDetected) _confirmPayment();
     });
@@ -109,7 +110,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
     super.dispose();
   }
 
-  /// Gundua wakati PesaPal inaturudisha kwenye callback_url yetu.
+  /// Detect when PesaPal sends us back to our callback_url.
   void _handleUrl(String url) {
     if (_returnDetected) return;
     if (!url.contains(PesapalService.returnUrlMarker)) return;
@@ -119,10 +120,10 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
     _confirmPayment();
   }
 
-  /// Subiri hali halisi ya malipo kwenye jedwali la "transactions".
+  /// Wait for the real payment status in the "transactions" table.
   ///
-  /// Realtime inatumika kama inapatikana (haraka); kama haipatikani, tunapoll
-  /// kila sekunde 2 (mara 6) kama ilivyoelezwa.
+  /// Realtime is used when available (faster); if unavailable, we poll
+  /// every 3 seconds (20 times) as described.
   Future<void> _confirmPayment() async {
     if (_resolved) return;
     if (mounted) {
@@ -134,10 +135,10 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
 
     PesapalStatus status;
     try {
-      // Realtime ndiyo ya haraka; polling (sekunde 2 x 6) ni fallback.
+      // Realtime is the fast path; polling (3s x 20) is the fallback.
       status = await _pesapal.waitForFinalStatus(
         widget.orderId,
-        realtimeTimeout: const Duration(seconds: 18),
+        realtimeTimeout: const Duration(seconds: 45),
       );
     } catch (_) {
       status = PesapalStatus.unknown;
@@ -170,7 +171,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
     }
   }
 
-  /// Maliza mtiririko: onyesha ujumbe, kisha rudisha matokeo kwa skrini iliyopita.
+  /// Finish the flow: show the message, then return the result to the previous screen.
   void _finish(_PaymentStage stage, bool? result, String message) {
     if (_resolved) return;
     setState(() {
@@ -179,7 +180,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
       _message = message;
     });
 
-    // Muda mdogo ili mtumiaji aone ujumbe kabla ya kurudi nyuma.
+    // Brief delay so the user sees the message before going back.
     Timer(const Duration(milliseconds: 1400), () {
       if (mounted) Navigator.of(context).pop(result);
     });
@@ -263,7 +264,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
         padding: const EdgeInsets.symmetric(vertical: 26, horizontal: 22),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: AppRadius.card,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -293,7 +294,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
     );
   }
 
-  /// Onyesho la mwisho: mafanikio / kushindwa / haijathibitishwa.
+  /// Final display: success / failed / not confirmed.
   Widget _buildResultOverlay() {
     late final IconData icon;
     late final Color color;
@@ -351,7 +352,7 @@ class _PaymentWebViewScreenState extends State<PaymentWebViewScreen> {
                 backgroundColor: AppColors.primary,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: AppRadius.sm,
                 ),
               ),
               child: const Text(

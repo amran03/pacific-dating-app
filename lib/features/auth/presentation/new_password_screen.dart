@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class NewPasswordScreen extends StatefulWidget {
   const NewPasswordScreen({super.key});
@@ -30,25 +32,16 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Password imebadilishwa kikamilifu! 🎉"),
-          backgroundColor: Colors.green,
-        ),
-      );
+      showAppNotification(context, "Password imebadilishwa kikamilifu! 🎉", color: Colors.green);
 
       // Rudisha mtumiaji kwenye login screen
       Navigator.of(context).popUntil((route) => route.isFirst);
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
-      );
+      showAppNotification(context, e.message, color: Colors.redAccent);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
-      );
+      showAppNotification(context, "Error: $e", color: Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -96,7 +89,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                     hintText: "Angalau herufi 6",
                     filled: true,
                     fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide.none),
                   ),
                   validator: (value) {
                     if (value == null || value.length < 6) return "Password must be at least 6 characters";
@@ -119,7 +112,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                     hintText: "Repeat password mpya",
                     filled: true,
                     fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide.none),
                   ),
                   validator: (value) {
                     if (value != _passwordController.text) return "Passwords do not match";
@@ -135,7 +128,7 @@ class _NewPasswordScreenState extends State<NewPasswordScreen> {
                     onPressed: _isLoading ? null : _updatePassword,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.xl),
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)

@@ -4,6 +4,8 @@ import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -61,9 +63,7 @@ class _SearchScreenState extends State<SearchScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSearching = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Search failed: $e")),
-        );
+        showAppNotification(context, "Search failed: $e");
       }
     }
   }
@@ -84,7 +84,7 @@ class _SearchScreenState extends State<SearchScreen> {
           height: 42,
           decoration: BoxDecoration(
             color: const Color(0xFFF3F4F8),
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: AppRadius.sm,
           ),
           child: TextField(
             controller: _searchController,
@@ -169,7 +169,7 @@ class _SearchScreenState extends State<SearchScreen> {
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: AppRadius.md,
             boxShadow: [
               BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3)),
             ],

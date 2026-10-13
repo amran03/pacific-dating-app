@@ -1,17 +1,17 @@
 /**
- * pesapal-ipn — endpoint ambayo PesaPal inaipiga YENYEWE (webhook).
+ * pesapal-ipn — the endpoint that PesaPal calls BY ITSELF (webhook).
  * ---------------------------------------------------------------------------
- * HAKUNA auth ya mtumiaji hapa (PesaPal haiwezi kuwa na JWT yako), kwa hiyo
- * deploy kwa:  supabase functions deploy pesapal-ipn --no-verify-jwt
+ * There is NO user auth here (PesaPal cannot hold your JWT), so deploy with:
+ *   supabase functions deploy pesapal-ipn --no-verify-jwt
  *
- * Inapokea: ?OrderTrackingId=...&OrderMerchantReference=...&OrderNotificationType=...
- *   (GET ndiyo default; POST/JSON pia inakubaliwa)
+ * Receives: ?OrderTrackingId=...&OrderMerchantReference=...&OrderNotificationType=...
+ *   (GET is the default; POST/JSON is also accepted)
  *
- * Inathibitisha status kwa GetTransactionStatus kisha inasasisha "transactions"
- * hadi COMPLETED/FAILED (service_role client -> inapita RLS). Kama COMPLETED,
- * coins zinaongezwa kwenye profile ya mtumiaji husika (idempotent).
+ * Verifies the status with GetTransactionStatus and then updates "transactions"
+ * to COMPLETED/FAILED (service_role client -> bypasses RLS). If COMPLETED,
+ * coins are credited to the user's profile (idempotent).
  *
- * Inarudisha 200 + JSON ambayo PesaPal inatarajia kwa IPN ya GET.
+ * Returns 200 + JSON, which PesaPal expects for GET IPNs.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // Kama PesaPal imetuma merchant reference pekee, tafuta tracking id yetu.
+    // If PesaPal only sent the merchant reference, look up our tracking id.
     if (!orderTrackingId && merchantReference) {
       orderTrackingId =
         (await resolveOrderTrackingId(admin, merchantReference)) ?? "";
@@ -134,11 +134,11 @@ Deno.serve(async (req) => {
         orderMerchantReference: merchantReference,
         status: 400,
         message:
-          "OrderTrackingId/OrderMerchantReference haipo kwenye IPN request.",
+          "OrderTrackingId/OrderMerchantReference missing from the IPN request.",
       });
     }
 
-    // Thibitisha kwa PesaPal + sasisha transactions (+ coins kama COMPLETED).
+    // Verify with PesaPal + update transactions (+ coins when COMPLETED).
     const result = await syncOrderStatus(admin, orderTrackingId);
     console.log("pesapal-ipn processed:", JSON.stringify(result));
 
@@ -154,7 +154,7 @@ Deno.serve(async (req) => {
     const message = error instanceof Error ? error.message : String(error);
     console.error("pesapal-ipn error:", message);
 
-    // 500 -> PesaPal itajaribu IPN tena baadaye (transient error).
+    // 500 -> PesaPal will retry the IPN later (transient error).
     return jsonResponse({ status: 500, error: message }, 500);
   }
 });

@@ -1,19 +1,19 @@
 /**
- * register-pesapal-ipn — inapigwa KWA MKONO MARA MOJA TU.
+ * register-pesapal-ipn — called MANUALLY, ONCE.
  * ---------------------------------------------------------------------------
- * Inasajili IPN URL yetu kwa PesaPal na kurudisha { ipn_id }. ipn_id hiyo
- * inawekwa kama secret:  supabase secrets set PESAPAL_IPN_ID=<ipn_id>
+ * It registers our IPN URL with PesaPal and returns { ipn_id }. That ipn_id
+ * is then stored as a secret:  supabase secrets set PESAPAL_IPN_ID=<ipn_id>
  *
- * ULINZI: function hii inahitaji ama
- *   - header  x-admin-secret: <PESAPAL_ADMIN_SECRET>   (pendekezo)
- *   - au     Authorization: Bearer <SERVICE_ROLE_KEY>
- * hivyo mtu asiyeruhusiwa hawezi kubadilisha IPN URL ya akaunti yako.
+ * PROTECTION: this function requires either
+ *   - header  x-admin-secret: <PESAPAL_ADMIN_SECRET>   (recommended)
+ *   - or     Authorization: Bearer <SERVICE_ROLE_KEY>
+ * so an unauthorized person cannot change your account's IPN URL.
  *
  * Deploy:  supabase functions deploy register-pesapal-ipn --no-verify-jwt
- * Ita:     curl -X POST ".../functions/v1/register-pesapal-ipn" \
- *            -H "x-admin-secret: $PESAPAL_ADMIN_SECRET" \
- *            -H "Content-Type: application/json" \
- *            -d '{"ipnUrl":"https://<ref>.supabase.co/functions/v1/pesapal-ipn"}'
+ * Call:    curl -X POST ".../functions/v1/register-pesapal-ipn" \
+ *             -H "x-admin-secret: $PESAPAL_ADMIN_SECRET" \
+ *             -H "Content-Type: application/json" \
+ *             -d '{"ipnUrl":"https://<ref>.supabase.co/functions/v1/pesapal-ipn"}'
  */
 import {
   corsHeaders,
@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ---------- 1) Ulinzi (function inapigwa kwa mkono, sio kila siku) ----------
+    // ---------- 1) Protection (this function is called manually, not daily) ----------
     const adminSecret = (Deno.env.get("PESAPAL_ADMIN_SECRET") ?? "").trim();
     const providedSecret = (req.headers.get("x-admin-secret") ?? "").trim();
     const authHeader = (req.headers.get("Authorization") ?? "").trim();
@@ -46,14 +46,14 @@ Deno.serve(async (req) => {
         {
           error: "Unauthorized",
           hint:
-            "Weka secret PESAPAL_ADMIN_SECRET kisha tuma header x-admin-secret, " +
-            "au tuma Authorization: Bearer <SERVICE_ROLE_KEY>.",
+            "Set the PESAPAL_ADMIN_SECRET secret and send the x-admin-secret header, " +
+            "or send Authorization: Bearer <SERVICE_ROLE_KEY>.",
         },
         401,
       );
     }
 
-    // ---------- 2) Chagua IPN URL ----------
+    // ---------- 2) Choose the IPN URL ----------
     const body = await req.json().catch(() => ({})) as {
       ipnUrl?: string;
       url?: string;
@@ -65,17 +65,17 @@ Deno.serve(async (req) => {
 
     if (!ipnUrl.startsWith("https://")) {
       return jsonResponse(
-        { error: "IPN URL lazima iwe https:// (PesaPal hairuhusu http)." },
+        { error: "The IPN URL must start with https:// (PesaPal does not allow http)." },
         400,
       );
     }
 
-    // ---------- 3) Wasiliana na PesaPal ----------
+    // ---------- 3) Talk to PesaPal ----------
     const { consumerKey, consumerSecret } = pesapalCredentials();
     const token = await getToken(consumerKey, consumerSecret);
 
-    // Kama IPN hii ilikwisha sajiliwa (URL ile ile), tumia ipn_id ile ile.
-    // PesaPal haina endpoint ya "update" — kusajili tena kunatengeneza duplicate.
+    // If this IPN was already registered (same URL), reuse the same ipn_id.
+    // PesaPal has no "update" endpoint — re-registering creates a duplicate.
     const existing = await getIpnList(token).catch(() => []);
     const already = existing.find((ipn) =>
       (ipn.url ?? ipn.ipn_url ?? "").trim() === ipnUrl

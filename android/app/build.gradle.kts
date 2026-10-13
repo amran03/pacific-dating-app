@@ -30,7 +30,8 @@ android {
     defaultConfig {
         applicationId = "com.example.pacific_dating_app"
 
-        minSdk = flutter.minSdkVersion
+        // ZEGO inahitaji minSdk >= 21; kama Flutter iko chini ya 21, tumia 21.
+        minSdk = maxOf(flutter.minSdkVersion, 21)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -51,7 +52,12 @@ android {
 
     buildTypes {
         release {
-            // Tumia release keystore kama ipo, vinginevyo anguka kwenye debug keys
+            // ZEGO keep-rules — kama R8/minify itawashwa siku tofauti, zipo tayari.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            // Signing: tumia release keystore kama ipo, vinginevyo debug keys
             // ili `flutter build apk --release` isifeli kwenye mashine isiyo na keystore.
             signingConfig =
                 if (hasReleaseKeystore) {
@@ -71,6 +77,16 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// ============================================================
+// FCM (firebase_messaging + ZEGO offline call invitations).
+// Inaapplywa TU google-services.json ipo — bila fail ya json,
+// build itabaki salama (kama ilivyokuwa kabla).
+// Pakua json kutoka: Firebase Console > Project settings > Android app.
+// ============================================================
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
 
 dependencies {

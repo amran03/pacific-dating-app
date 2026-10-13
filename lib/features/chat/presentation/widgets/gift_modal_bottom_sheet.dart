@@ -6,6 +6,8 @@ import 'package:pacific_dating_app/features/chat/domain/models/gift_model.dart';
 import 'package:pacific_dating_app/core/services/supabase_service.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 /// Modal ya kutuma zawadi - muundo wa TikTok: tray ya kusogeza to mlalo,
 /// coins zako halisi zinaonekana juu, na kutuma zawadi kunapunguza coins
@@ -54,7 +56,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
   String? _sendingGiftId;
   String? _errorMessage;
   Set<String> _unlockedGifts = {};
-  List<GiftModel> _gifts = pasificGifts;
+  List<GiftModel> _gifts = pacificGifts;
   bool _isLoadingGifts = false;
 
   @override
@@ -115,7 +117,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
     final isUnlocked = _isGiftUnlocked(gift.id);
     
     if (!isUnlocked && currentCoins < gift.coinPrice) {
-      setState(() => _errorMessage = "You don't have enough Coins for ${gift.name}. Buy Coins zaidi.");
+      setState(() => _errorMessage = "You don't have enough Coins for ${gift.name}. Buy more Coins.");
       return;
     }
 
@@ -230,7 +232,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                       height: 5,
                       decoration: BoxDecoration(
                         color: Colors.grey.shade300,
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: AppRadius.sm,
                       ),
                     ),
                   ),
@@ -249,7 +251,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
                           color: AppColors.coinGold.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: AppRadius.card,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -257,7 +259,10 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                             const Text("🪙 ", style: TextStyle(fontSize: 14)),
                             Text(
                               "$myCoins",
-                              style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.coinGold),
+                              // Dark gold — white-on-gold / gold-on-white
+                              // hazisomeki (contrast). coinGoldDark ina
+                              // contrast ya kutosha kwenye card nyepesi.
+                              style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.coinGoldDark),
                             ),
                           ],
                         ),
@@ -272,7 +277,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: AppRadius.sm,
                       ),
                       child: Row(
                         children: [
@@ -287,9 +292,7 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
                           TextButton(
                             onPressed: () {
                               // Nafasi ya baadaye kuunganisha In-App Purchases
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Buying Coins is coming soon! 🪙")),
-                              );
+                              showAppNotification(context, "Buying Coins is coming soon! 🪙");
                             },
                             child: const Text("Buy", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
                           ),
@@ -423,7 +426,7 @@ class _GiftCardState extends State<_GiftCard>
                   gift.glowColor.withValues(alpha: 0.7),
                 ],
               ),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: AppRadius.card,
             ),
             child: Text(
               gift.isLuxury ? "VIP" : "PRO",
@@ -555,7 +558,7 @@ class _GiftCardState extends State<_GiftCard>
                 : widget.isUnlocked
                     ? AppColors.success.withValues(alpha: 0.16)
                     : AppColors.coinGold.withValues(alpha: 0.16),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: AppRadius.card,
           ),
           child: Text(
             widget.isUnlocked ? "✓ Unlocked" : "🪙 ${gift.coinPrice}",
@@ -611,7 +614,7 @@ class _GiftCardState extends State<_GiftCard>
                           end: Alignment.bottomCenter,
                         ),
                   color: locked ? Colors.grey.shade100 : null,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: AppRadius.card,
                   border: Border.all(
                     color: locked
                         ? Colors.grey.shade300

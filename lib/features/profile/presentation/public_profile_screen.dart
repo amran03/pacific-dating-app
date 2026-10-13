@@ -7,6 +7,8 @@ import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/widgets/profile_image_with_ring.dart';
 import 'package:pacific_dating_app/features/chat/presentation/individual_chat_screen.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 /// Inaonyesha profile KAMILI ya mtumiaji MWINGINE (sio ya mwenyewe).
 /// Inafunguliwa kutoka Discover card, Likes grid, au Chat header.
@@ -57,15 +59,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       await MatchmakingService().rateUser(widget.uid, stars);
       await _loadStats();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('You gave $stars! ⭐')),
-        );
+        showAppNotification(context, 'You gave $stars! ⭐');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to send rating. Please try again.')),
-        );
+        showAppNotification(context, 'Failed to send rating. Please try again.');
       }
     } finally {
       if (mounted) setState(() => _ratingBusy = false);
@@ -115,7 +113,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.card),
         title: const Text("Unlock Chat"),
         content: Text(
           "${user.name} requires $price Coins to open a chat with you for the first time. After that you can chat for free.",
@@ -141,15 +139,9 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       if (context.mounted) _navigateToChat(context, user);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.toString().contains('INSUFFICIENT_COINS')
+        showAppNotification(context, e.toString().contains('INSUFFICIENT_COINS')
                   ? "You do not have enough Coins. Go to Profile -> Top Up."
-                  : "Failed to open chat: $e",
-            ),
-          ),
-        );
+                  : "Failed to open chat: $e");
       }
     }
   }
@@ -307,7 +299,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: _getTierColor(user.badgeTier),
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: AppRadius.sm,
                                 ),
                                 child: Text(
                                   user.badgeTier.toUpperCase(),
@@ -388,7 +380,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: AppRadius.sm,
                             ),
                             child: Text(interest, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                           ))
@@ -407,7 +399,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                               Icon(Icons.lock_outline_rounded, size: 14, color: Colors.grey.shade600),
                               const SizedBox(width: 6),
                               Text(
-                                "Kufungua chat: ${user.chatUnlockPrice} Coins (mara moja tu)",
+                                "Chat unlock: ${user.chatUnlockPrice} Coins (one-time only)",
                                 style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                               ),
                             ],
@@ -426,7 +418,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                            shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
                           ),
                         ),
                       ),
@@ -447,7 +439,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: AppRadius.sm,
         border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
       ),
       child: Row(
@@ -504,7 +496,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
           final filled = star <= myStars;
           return InkWell(
             onTap: _ratingBusy ? null : () => _rate(star),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: AppRadius.card,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
               child: Icon(
@@ -550,7 +542,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: AppRadius.card,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.06),
@@ -616,7 +608,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                       horizontal: 10, vertical: 7),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFFB800).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: AppRadius.sm,
                     border: Border.all(
                         color: const Color(0xFFFFB800)
                             .withValues(alpha: 0.35)),

@@ -6,6 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/services/storage_service.dart';
 import '../../../../core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -99,18 +101,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
       if (mounted) {
         setState(() => _profileImageUrl = url);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile photo updated!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showAppNotification(context, 'Profile photo updated!', color: Colors.green);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload photo: $e')),
-        );
+        showAppNotification(context, 'Failed to upload photo: $e');
       }
     } finally {
       if (mounted) setState(() => _isUploadingPhoto = false);
@@ -135,19 +130,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }).eq('uid', user.id);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        showAppNotification(context, 'Profile updated successfully!', color: Colors.green);
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save: $e')),
-        );
+        showAppNotification(context, 'Failed to save: $e');
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -214,14 +202,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     _buildPhotoHeader(),
                     const SizedBox(height: 28),
-                    _buildTextField(_nameController, 'Name', 'Jina lako'),
+                    _buildTextField(_nameController, 'Name', 'Your name'),
                     const SizedBox(height: 16),
                     _buildTextField(_bioController, 'Bio',
-                        'Andika maelezo mafupi...', maxLines: 4),
+                        'Write a short bio...', maxLines: 4),
                     const SizedBox(height: 16),
-                    _buildTextField(_jobController, 'Occupation', 'Kazi yako'),
+                    _buildTextField(_jobController, 'Occupation', 'Your occupation'),
                     const SizedBox(height: 16),
-                    _buildTextField(_locationController, 'Location', 'Mji, Nchi'),
+                    _buildTextField(_locationController, 'Location', 'City, Country'),
                     const SizedBox(height: 24),
                     const Text(
                       'Interests',
@@ -260,7 +248,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFFF4B72),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(26),
+                            borderRadius: AppRadius.xl,
                           ),
                         ),
                         child: const Text(
@@ -374,7 +362,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: AppRadius.sm,
               borderSide: BorderSide.none,
             ),
           ),

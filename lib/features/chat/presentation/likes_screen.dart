@@ -4,6 +4,7 @@ import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class LikesScreen extends StatefulWidget {
   const LikesScreen({super.key});
@@ -66,12 +67,12 @@ class _LikesScreenState extends State<LikesScreen> {
                   const Icon(Icons.favorite_border_rounded, size: 70, color: Colors.grey),
                   const SizedBox(height: 16),
                   const Text(
-                    "Bado hakuna aliyekupenda",
+                    "No likes yet",
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: Colors.black87),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    "Continue kutafuta kwenye Discover - watu wanaokupenda\nwataonekana hapa moja to moja.",
+                    "Keep exploring Discover — people who like you\nwill appear here one by one.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w300),
                   ),
@@ -117,7 +118,7 @@ class _LikesScreenState extends State<LikesScreen> {
                             );
                           },
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
+                            borderRadius: AppRadius.card,
                             child: Stack(
                               children: [
                                 Positioned.fill(

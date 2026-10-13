@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 /// A single content section of a legal page.
 class LegalSection {
@@ -139,7 +140,7 @@ class _HeaderCard extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: AppRadius.xl,
           gradient: LinearGradient(
             colors: AppColors.primaryGradient,
             begin: Alignment.topLeft,
@@ -191,7 +192,7 @@ class _HeaderCard extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: AppRadius.xl,
               ),
               child: Text(
                 lastUpdated,
@@ -248,7 +249,7 @@ class _SectionCardState extends State<_SectionCard> {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: AppRadius.card,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.04),
@@ -266,7 +267,7 @@ class _SectionCardState extends State<_SectionCard> {
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: AppRadius.sm,
                     ),
                     child: Icon(
                       section.icon,

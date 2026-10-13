@@ -151,9 +151,17 @@ create table if not exists public.messages (
   content text not null default '',
   type text not null default 'text', -- text | image | audio
   media_url text,
+  -- Unread badge inahesabu rows zenye seen = false (receiver_id = mimi).
+  -- seen inageuka true NA seen_at inajazwa TU pale chat yenyewe
+  -- inapofunguliwa (individual_chat_screen -> _markMessagesAsSeen),
+  -- SI pale orodha ya messages inapofunguliwa.
   seen boolean not null default false,
+  seen_at timestamptz,
   created_at timestamptz default now()
 );
+
+-- Idempotent: messages zilizopo (old DB) ziongeze seen_at.
+alter table public.messages add column if not exists seen_at timestamptz;
 
 -- ---------- NOTIFICATIONS ----------
 create table if not exists public.notifications (
@@ -480,7 +488,7 @@ create or replace function public.send_gift(
   p_gift_emoji text default '',
   p_gift_image_url text default '',
   p_coin_cost int default 0,
-  p_from_name text default 'Mtumiaji'
+  p_from_name text default 'User'
 ) returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   v_from_uid uuid := auth.uid();
@@ -496,7 +504,7 @@ begin
     raise exception 'INVALID_PRICE';
   end if;
 
-  -- Funga row ya mtumaji ili kuzuia double-spend (bonyeza mara 2 haraka).
+  -- Lock the sender's row to prevent double-spend (two fast taps).
   select coins into v_balance from public.users where uid = v_from_uid for update;
   if not found then
     raise exception 'SENDER_NOT_FOUND';
@@ -519,8 +527,8 @@ begin
      coalesce(p_coin_cost, 0));
 
   insert into public.notifications (to_uid, type, title, description, created_at, read)
-  values (p_to_uid, 'gift', 'Umepokea Zawadi Mpya! 🎁',
-    coalesce(p_from_name, 'Mtumiaji') || ' amekutumia ' ||
+  values (p_to_uid, 'gift', 'You received a new gift! 🎁',
+    coalesce(p_from_name, 'User') || ' sent you ' ||
     coalesce(nullif(p_gift_emoji, ''), '🎁') || ' ' || p_gift_name || '.',
     now(), false);
 
@@ -560,16 +568,8 @@ insert into storage.buckets (id, name, public)
 values ('chat_media', 'chat_media', true)
 on conflict (id) do nothing;
 
--- ============================================================
--- STORAGE BUCKETS (can also be created in the Supabase UI)
--- ============================================================
-insert into storage.buckets (id, name, public)
-values ('avatars', 'avatars', true)
-on conflict (id) do nothing;
-
-insert into storage.buckets (id, name, public)
-values ('chat_media', 'chat_media', true)
-on conflict (id) do nothing;
+-- Voice notes zinaandikwa kwenye bucket ile ile ya chat_media (m4a),
+-- kwa hiyo hakuna bucket nyingine inayohitajika.
 
 -- NOTE: storage.objects.owner_id is TEXT (not uuid). Comparing it to the
 -- uuid-returning auth.uid() fails with "ERROR 42883: operator does not exist:

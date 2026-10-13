@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 /// Shown when the app starts without Supabase credentials, instead of
 /// crashing. Gives clear, copy-pasteable setup instructions.
@@ -17,7 +18,7 @@ class SupabaseSetupScreen extends StatelessWidget {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: AppRadius.xl,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.06),
@@ -69,7 +70,7 @@ class SupabaseSetupScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: AppRadius.sm,
                     ),
                     child: const Text(
                       'flutter run \\\n'

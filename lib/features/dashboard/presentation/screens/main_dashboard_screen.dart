@@ -16,6 +16,8 @@ import 'package:pacific_dating_app/features/chat/presentation/chat_list_screen.d
 import 'package:pacific_dating_app/features/chat/presentation/likes_screen.dart';
 import 'package:pacific_dating_app/features/profile/presentation/profile_screen.dart';
 import 'package:pacific_dating_app/features/profile/presentation/screens/search_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
@@ -32,7 +34,7 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
     const DiscoverTab(),
     const LikesScreen(),     // Kutoka likes_screen.dart
     const ChatListScreen(),  // Kutoka chat_list_screen.dart
-    const ProfileScreen(),   // <--- Imeunganishwa rasmi hapa!
+    const ProfileScreen(),   // <--- Officially integrated here!
   ];
 
   @override
@@ -105,7 +107,7 @@ class _ChatTabIcon extends StatelessWidget {
         const icon = Icon(Icons.chat_bubble_rounded);
         if (unread <= 0) return icon;
         return Badge.count(
-          count: unread, // inaonyesha "99+" kiotomatiki kwa nyingi mno
+          count: unread, // automatically shows "99+" for large numbers
           child: icon,
         );
       },
@@ -119,11 +121,13 @@ class NotificationScreen extends StatelessWidget {
 
   // Kila 'type' ina icon na rangi yake - inatumika kupamba arifa halisi
   // zinazotoka Supabase (badala ya kuwa hardcoded).
+  // NOTE: hakuna 'message' hapa — arifa za messages zinaonyeshwa kwenye
+  // tab ya Chat/pekee; notification page inaonyesha matukio mengine tu
+  // (gifts, matches, coins, missed calls...).
   static const Map<String, Map<String, dynamic>> _typeStyles = {
     'gift': {'icon': Icons.card_giftcard_rounded, 'color': Colors.pink},
     'coins': {'icon': Icons.monetization_on_rounded, 'color': Colors.amber},
     'match': {'icon': Icons.favorite_rounded, 'color': Colors.redAccent},
-    'message': {'icon': Icons.chat_bubble_rounded, 'color': Colors.blue},
     'missed_call': {
       'icon': Icons.phone_missed_rounded,
       'color': Colors.redAccent,
@@ -159,6 +163,11 @@ class NotificationScreen extends StatelessWidget {
           .update({'read': true})
           .eq('to_uid', myUid)
           .eq('read', false)
+          // Arifa za 'message' haziashiriwi kusomwa hapa — zinaashiriwa
+          // pale chat yenyewe inapofunguliwa (badge ya chat ndiyo ya
+          // kuaminika; opening the notification page HASITANGAZI messages
+          // kuwa zimesomwa).
+          .neq('type', 'message')
           .then((_) {}, onError: (e) => debugPrint('Mark-as-read failed: $e'));
     }
 
@@ -185,6 +194,10 @@ class NotificationScreen extends StatelessWidget {
             .from('notifications')
             .stream(primaryKey: ['id'])
             .eq('to_uid', myUid)
+            // MESSAGES ZINA MAHALI PAKE PALE PEKEE: tab ya Chat. Arifa za
+            // type 'message' hazionyeshwi hapa — page hii inaonyesha
+            // matukio mengine tu (gifts, matches, coins, missed calls).
+            .neq('type', 'message')
             .order('created_at', ascending: false)
             .limit(50),
         builder: (context, snapshot) {
@@ -215,12 +228,12 @@ class NotificationScreen extends StatelessWidget {
                   const Icon(Icons.notifications_none_rounded, size: 70, color: Colors.grey),
                   const SizedBox(height: 16),
                   const Text(
-                    "Bado hakuna arifa",
+                    "No notifications yet",
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.black87),
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    "Arifa za gifts, matches, na coins\nzitaonekana hapa.",
+                    "Notifications about gifts, matches, and coins\nwill appear here.",
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey),
                   ),
@@ -248,7 +261,7 @@ class NotificationScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: AppRadius.card,
                   border: isRead
                       ? Border.all(color: Colors.grey.shade200)
                       : Border.all(
@@ -443,7 +456,7 @@ class _ChatAccessButtonState extends State<ChatAccessButton> {
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.amber,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: AppRadius.sm,
                       ),
                       child: Text(
                         "$price",
@@ -546,9 +559,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
         });
       }
       final msg = e.toString().replaceFirst('Exception: ', '');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg.isEmpty ? 'Failed to load users. Please tap Show Again.' : msg)),
-      );
+      showAppNotification(context, msg.isEmpty ? 'Failed to load users. Please tap Show Again.' : msg);
     }
   }
 
@@ -643,53 +654,49 @@ class _DiscoverTabState extends State<DiscoverTab> {
         .toList();
   }
 
-  /// isLike=true (swipe up / gift) -> real Like. isLike=false (swipe
-  /// down) -> Pass. After the animation, the profile is removed from the
-  /// stack (no re-loop because these are real people, not dummy data).
-  void _swipeVertical(bool isLike) {
+  /// SWIPE = SCROLL TU (hairiasi ya "like"). Swipe juu/chini inasogeza
+  /// card moja mbele — HAIANDIKI chochote kwenye database. Kupendana
+  /// (like/match) kunarekodiwa TU kupitia kitufe cha "Match" cha kwenye
+  /// card ([_likeProfile]) — tazama chini.
+  void _advanceCard() {
     if (_profiles.isEmpty || _topCardIndex >= _profiles.length) return;
 
-    final swipedProfile = _profiles[_topCardIndex];
-    final String? targetUid = swipedProfile['uid'] as String?;
-
     setState(() {
-      _dragOffset = Offset(0, isLike ? -800 : 800);
+      _dragOffset = Offset.zero;
       _isDragging = false;
     });
 
-    // Write like/pass to Supabase - does not block the UI
-    if (targetUid != null) {
-      _matchmakingService.recordSwipe(targetUid, isLike: isLike).then((isMutualMatch) {
-        if (isMutualMatch && mounted) {
-          _showMatchDialog(swipedProfile);
-        }
-      }).catchError((e) {
-        debugPrint("Swipe recording error: $e");
-      });
-    }
-
+    // Pila card iendele: profile iliyopita inahifadhiwa kwenye
+    // _swipedProfiles ili iweze kurudishwa (INFINITE LOOP) badala ya
+    // orodha kuisha.
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       setState(() {
         if (_profiles.isNotEmpty && _topCardIndex < _profiles.length) {
-          // INFINITE SWIPE: keep the swiped profile for recycling —
-          // swipes never run out.
           _swipedProfiles.add(_profiles.removeAt(_topCardIndex));
         }
         _dragOffset = Offset.zero;
+
+        // INFINITE LOOP: stack ikishaisha, rudi mwanzo (recycle) —
+        // profiles zilizopitwa zinazungushwa tena kwa mpya.
+        if (_profiles.isEmpty && _swipedProfiles.isNotEmpty) {
+          _profiles.addAll([..._swipedProfiles]..shuffle());
+          _swipedProfiles.clear();
+          _topCardIndex = 0;
+        }
       });
 
-      // When the stack gets small (<= 3 cards left), load more in the
-      // BACKGROUND without showing a blocking loader.
+      // Stack ikipungua (<= 3 zilizo mbele), pakia mpya BACKGROUND
+      // bila loader inayozuia mtumiaji.
       if (_profiles.length - _topCardIndex <= 3) {
         _loadMoreUsers();
       }
     });
   }
 
-  /// LIKE button on the card: records a real like to Supabase (same as
-  /// swiping up), animates the card away and shows the match dialog on
-  /// a mutual match. Safe if uid is missing.
+  /// MATCH button (kitufe cha moyo kwenye card): HII pekee ndiyo inayosajili
+  /// "like" kwenye database na kuunda match pale pande zote mbili
+  /// zimependana. Swipe ni scroll tu — haina maana ya kupendana.
   void _likeProfile(Map<String, dynamic> profile) {
     if (_profiles.isEmpty || _topCardIndex >= _profiles.length) return;
 
@@ -721,6 +728,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
           _swipedProfiles.add(_profiles.removeAt(_topCardIndex));
         }
         _dragOffset = Offset.zero;
+
+        // INFINITE LOOP: stack ikishaisha baada ya match, rudi mwanzo.
+        if (_profiles.isEmpty && _swipedProfiles.isNotEmpty) {
+          _profiles.addAll([..._swipedProfiles]..shuffle());
+          _swipedProfiles.clear();
+          _topCardIndex = 0;
+        }
       });
 
       if (_profiles.length - _topCardIndex <= 3) {
@@ -740,7 +754,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
             padding: const EdgeInsets.all(28),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(32),
+              borderRadius: AppRadius.xl,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -791,7 +805,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
                     ),
                     child: const Text("Start Chatting", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
@@ -840,7 +854,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       padding: const EdgeInsets.all(28),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(32),
+                        borderRadius: AppRadius.xl,
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.2),
@@ -894,7 +908,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         Navigator.pop(context);
-        _swipeVertical(true);
+        // Gift imetumwa — endelea na card ijayo (swipe HAI-rekodi like).
+        _advanceCard();
       }
     });
   }
@@ -914,7 +929,11 @@ class _DiscoverTabState extends State<DiscoverTab> {
               : Supabase.instance.client
                   .from('notifications')
                   .stream(primaryKey: ['id'])
-                  .eq('to_uid', Supabase.instance.client.auth.currentUser!.id),
+                  .eq('to_uid', Supabase.instance.client.auth.currentUser!.id)
+                  // Zilingane na NotificationScreen: arifa za 'message'
+                  // hazihesabiwi kwenye bell hii (zina badge yake kwenye
+                  // tab ya Chat).
+                  .neq('type', 'message'),
           builder: (context, snapshot) {
             final int unreadCount = (snapshot.data ?? [])
                 .where((n) => n['read'] != true)
@@ -982,6 +1001,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     ],
                   ),
                 )
+              // Empty state only when there is truly NOBODY to show (no
+              // fresh + no recycled profiles). With the INFINITE LOOP this
+              // is rare — recycled profiles keep the cards coming back.
               : _profiles.isEmpty
               ? Center(
             child: Column(
@@ -1004,7 +1026,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   onPressed: _loadDiscoverableUsers,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
                   ),
                   child: const Text("Show Again", style: TextStyle(color: Colors.white)),
                 ),
@@ -1039,10 +1061,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     });
                   },
                   onVerticalDragEnd: (details) {
-                    if (_dragOffset.dy < -130) {
-                      _swipeVertical(true);
-                    } else if (_dragOffset.dy > 130) {
-                      _swipeVertical(false);
+                    // Swipe = SCROLL TU: up au down — card inasogeza mbele,
+                    // hakuna like/pass inayorekodiwa kwenye database.
+                    if (_dragOffset.dy < -130 || _dragOffset.dy > 130) {
+                      _advanceCard();
                     } else {
                       setState(() {
                         _dragOffset = Offset.zero;
@@ -1058,12 +1080,6 @@ class _DiscoverTabState extends State<DiscoverTab> {
                     child: Stack(
                       children: [
                         _buildCardUI(_profiles[_topCardIndex], isFront: true),
-
-                        // LIKE / PASS stamps shown while dragging the card
-                        // (pro dating-app touch like Tinder).
-                        IgnorePointer(
-                          child: _buildDragStamps(dragProgress),
-                        ),
                       ],
                     ),
                   ),
@@ -1085,7 +1101,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.65),
-                        borderRadius: BorderRadius.circular(30),
+                        borderRadius: AppRadius.xl,
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1119,99 +1135,13 @@ class _DiscoverTabState extends State<DiscoverTab> {
     );
   }
 
-  /// LIKE / PASS stamps shown while dragging the card (vertical).
-  Widget _buildDragStamps(double dragProgress) {
-    final double likeOpacity =
-        ((-dragProgress - 0.2) / 0.45).clamp(0.0, 1.0);
-    final double passOpacity =
-        ((dragProgress - 0.2) / 0.45).clamp(0.0, 1.0);
-
-    Widget stamp({
-      required String label,
-      required IconData icon,
-      required Color color,
-      required double opacity,
-      required double rotation,
-    }) {
-      return Opacity(
-        opacity: opacity,
-        child: Transform.rotate(
-          angle: rotation,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 10,
-            ),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white, width: 3),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.5),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: Colors.white, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        if (likeOpacity > 0)
-          Positioned(
-            top: 44,
-            left: 28,
-            child: stamp(
-              label: "LIKE",
-              icon: Icons.favorite_rounded,
-              color: AppColors.success,
-              opacity: likeOpacity,
-              rotation: -0.22,
-            ),
-          ),
-        if (passOpacity > 0)
-          Positioned(
-            top: 44,
-            right: 28,
-            child: stamp(
-              label: "PASS",
-              icon: Icons.close_rounded,
-              color: AppColors.error,
-              opacity: passOpacity,
-              rotation: 0.22,
-            ),
-          ),
-      ],
-    );
-  }
-
   Widget _buildCardUI(Map<String, dynamic> profile, {required bool isFront}) {
     final String imageUrl = (profile['image'] as String?) ?? '';
     final String name = (profile['name'] as String?) ?? '';
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32),
+        borderRadius: AppRadius.xl,
         image: imageUrl.isNotEmpty
             ? DecorationImage(
                 image: NetworkImage(imageUrl),
@@ -1245,7 +1175,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
             ),
           Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(32),
+              borderRadius: AppRadius.xl,
               gradient: LinearGradient(
                 colors: [
                   Colors.transparent,
@@ -1332,7 +1262,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
                                 begin: Alignment.centerLeft,
                                 end: Alignment.centerRight,
                               ),
-                              borderRadius: BorderRadius.circular(30),
+                              borderRadius: AppRadius.xl,
                               boxShadow: [
                                 BoxShadow(
                                   color: const Color(0xFFFF416C).withValues(alpha: 0.5),
@@ -1364,33 +1294,49 @@ class _DiscoverTabState extends State<DiscoverTab> {
                         ),
                       ),
                       const SizedBox(width: 16),
-                      // LIKE button — records a real like (same as swipe up).
-                      GestureDetector(
-                        onTap: () => _likeProfile(profile),
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.18),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 12,
-                                offset: const Offset(0, 5),
+                      // MATCH button — HII ndiyo njia pekee ya kupendana:
+                      // inarekodi like halisi kwenye Supabase na kuunda
+                      // match kama pande zote mbili zimependana.
+                      // (Swipe ni scroll tu — hairiasi kupendana.)
+                      Column(
+                        children: [
+                          GestureDetector(
+                            onTap: () => _likeProfile(profile),
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withValues(alpha: 0.18),
+                                border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.3),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ],
                               ),
-                            ],
+                              child: const Icon(
+                                Icons.favorite_rounded,
+                                color: Colors.white,
+                                size: 30,
+                              ),
+                            ),
                           ),
-                          child: const Icon(
-                            Icons.favorite_rounded,
-                            color: Colors.white,
-                            size: 30,
+                          const SizedBox(height: 4),
+                          const Text(
+                            "Match",
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                       const SizedBox(width: 16),
                       ChatAccessButton(
@@ -1419,7 +1365,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppRadius.card,
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.25),
           ),

@@ -3,6 +3,7 @@ import '../../../../core/constants/app_color.dart';
 import '../../../../core/services/validation_service.dart';
 import '../../../../core/services/core_error_service.dart';
 import 'gender_screen.dart'; // Tutaitengeneza hatua inayofuata
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class BirthdayScreen extends StatefulWidget {
   final String firstName;
@@ -21,7 +22,7 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
       context: context,
       initialDate: DateTime(2002, 1, 1),
       firstDate: DateTime(1950),
-      lastDate: DateTime.now().subtract(const Duration(days: 18 * 365)), // Dinamiki: lazima awe na miaka 18+
+      lastDate: DateTime.now().subtract(const Duration(days: 18 * 365)), // Dynamic: must be 18+
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -86,7 +87,7 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
                   decoration: BoxDecoration(
                     color: AppColors.inputFill,
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: AppRadius.md,
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -137,7 +138,7 @@ class _BirthdayScreenState extends State<BirthdayScreen> {
                     disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: AppRadius.xl,
                     ),
                   ),
                   child: const Text(

@@ -1,26 +1,26 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Hali ya malipo kama inavyoonekana kwenye jedwali la `transactions`.
+/// Payment status as seen in the `transactions` table.
 enum PesapalStatus {
-  /// Bado PesaPal inathibitisha malipo.
+  /// PesaPal has not confirmed the payment yet.
   pending,
 
-  /// Malipo yamekamilika; coins zimeongezwa na Edge Function.
+  /// Payment completed; coins were credited by the Edge Function.
   completed,
 
-  /// Malipo yameshindwa / yamerejeshwa.
+  /// Payment failed / reversed.
   failed,
 
-  /// Hali haijulikani (mtandao, rekodi haipo, au bado haijathibitishwa).
+  /// Status unknown (network, missing record, or not confirmed yet).
   unknown;
 
   bool get isFinal =>
       this == PesapalStatus.completed || this == PesapalStatus.failed;
 }
 
-/// Matokeo ya `create-pesapal-order` Edge Function.
+/// Result of the `create-pesapal-order` Edge Function.
 class PesapalOrderResult {
   const PesapalOrderResult({
     required this.redirectUrl,
@@ -32,19 +32,19 @@ class PesapalOrderResult {
     this.description,
   });
 
-  /// URL ya malipo ya PesaPal (fungua kwenye WebView).
+  /// PesaPal payment URL (open it in a WebView).
   final String redirectUrl;
 
-  /// Order id yetu: `PACIFIC-<uid>-<timestamp>`.
+  /// Our order id: `PACIFIC-<uid>-<timestamp>`.
   final String orderId;
 
   /// PesaPal order_tracking_id.
   final String orderTrackingId;
 
-  /// Kiasi kilicholipwa (TZS) - kinahesabiwa server side.
+  /// Amount paid (TZS) â€” calculated server side.
   final num amount;
 
-  /// Coins zinazopatikana baada ya malipo kufanikiwa.
+  /// Coins received after a successful payment.
   final int coins;
 
   final String currency;
@@ -65,7 +65,7 @@ class PesapalOrderResult {
   bool get isValid => redirectUrl.isNotEmpty && orderId.isNotEmpty;
 }
 
-/// Exception ya malipo ya PesaPal (ina ujumbe wa kuonyesha kwa mtumiaji).
+/// PesaPal payment exception (carries a user-facing message).
 class PesapalException implements Exception {
   const PesapalException(this.message);
 
@@ -75,52 +75,56 @@ class PesapalException implements Exception {
   String toString() => message;
 }
 
-/// Huduma ya PesaPal kwa upande wa Flutter.
+/// PesaPal service for the Flutter side.
 ///
-/// MUHIMU: `consumer_key` / `consumer_secret` HAZIPO hapa. Flutter inaita
-/// Edge Functions (`create-pesapal-order`) na Supabase Edge Function secrets
-/// ndizo zinazoshughulikia PesaPal API 3.0.
+/// IMPORTANT: `consumer_key` / `consumer_secret` are NOT here. Flutter calls
+/// Edge Functions (`create-pesapal-order`) and the Supabase Edge Function
+/// secrets handle PesaPal API 3.0.
 class PesapalService {
   PesapalService._();
 
   static final PesapalService instance = PesapalService._();
 
-  /// Kiwango cha ubadilishaji: 1 Pacific Coin = 25 TZS.
-  /// LAZIMA ilingane na COIN_RATE_TZS kwenye
+  /// Exchange rate: 1 Pacific Coin = 25 TZS.
+  /// MUST match COIN_RATE_TZS in
   /// supabase/functions/create-pesapal-order/index.ts.
   static const int kCoinRateTzs = 25;
 
-  /// Kima cha chini / juu cha coins kwa order moja.
+  /// Minimum / maximum coins per order.
   static const int kMinCoins = 10;
   static const int kMaxCoins = 200000;
 
-  /// Sehemu ya URL ya callback_url yetu - PaymentWebViewScreen inaitumia
-  /// kugundua kwamba mtumiaji amerudi kutoka PesaPal.
+  /// Part of our callback_url â€” PaymentWebViewScreen uses it to detect that
+  /// the user has come back from PesaPal.
   static const String returnUrlMarker = 'pesapal-return';
 
-  /// Muda wa kusubiri Realtime / polling.
+  /// How long to wait for Realtime / polling.
+  ///
+  /// PesaPal's IPN/callback can lag after the redirect. We wait up to 45s on
+  /// Realtime, then fall back to polling every 3s for up to 20 tries (~60s).
   static const Duration _realtimeTimeout = Duration(seconds: 45);
-  static const Duration _pollInterval = Duration(seconds: 2);
-  static const int _pollAttempts = 6;
+  static const Duration _pollInterval = Duration(seconds: 3);
+  static const int _pollAttempts = 20;
 
   SupabaseClient get _client => Supabase.instance.client;
 
-  /// Badilisha TZS -> coins (kwa UI: "Unapata coins ngapi").
+  /// Convert TZS -> coins (for the UI: "How many coins you get").
   static int tzsToCoins(num amountTzs) => (amountTzs / kCoinRateTzs).floor();
 
-  /// Badilisha coins -> TZS (kwa UI: "Utalipa kiasi gani").
+  /// Convert coins -> TZS (for the UI: "How much you will pay").
   static int coinsToTzsAmount(int coins) => coins * kCoinRateTzs;
 
-  /// Mtumiaji aliyeingia kwa sasa (Auth yake inatumika kwa uid/email).
+  /// The currently signed-in user (their Auth is used for uid/email).
   User? get currentUser => _client.auth.currentUser;
 
-  /// Ita Edge Function `create-pesapal-order` na PesaPal.
+  /// Call the `create-pesapal-order` Edge Function and PesaPal.
   ///
-  /// [coins]: idadi ya coins mtumiaji anataka kununua (server inahesabu TZS).
-  /// [email] / [phone]: si lazima - kama hazitolewa, Edge Function inazichukua
-  /// kutoka profile ya mtumiaji (public.users) au email ya Auth.
+  /// [coins]: the number of coins the user wants to buy (the server
+  /// calculates the TZS amount).
+  /// [email] / [phone]: optional â€” if omitted, the Edge Function takes them
+  /// from the user's profile (public.users) or the Auth email.
   ///
-  /// Inarudisha [PesapalOrderResult] yenye `redirectUrl` ya kuifungua kwenye
+  /// Returns a [PesapalOrderResult] with the `redirectUrl` to open in the
   /// WebView.
   Future<PesapalOrderResult> createOrder({
     required int coins,
@@ -173,10 +177,10 @@ class PesapalService {
   }
 
   // ---------------------------------------------------------------------------
-  // Hali ya malipo (status)
+  // Payment status
   // ---------------------------------------------------------------------------
 
-  /// Soma rekodi moja ya transaction (RLS: mtumiaji anaona zake tu).
+  /// Read a single transaction record (RLS: the user only sees their own).
   Future<Map<String, dynamic>?> getTransaction(String orderId) async {
     final response = await _client
         .from('transactions')
@@ -195,13 +199,13 @@ class PesapalService {
     }
   }
 
-  /// Subiri hali ya mwisho ya malipo (COMPLETED / FAILED).
+  /// Wait for the final payment status (COMPLETED / FAILED).
   ///
-  /// 1. Soma hali ya sasa mara moja (huenda IPN ilikwisha sasisha).
-  /// 2. Kama bado PENDING: tumia Supabase Realtime (`.stream()`) - haraka zaidi.
-  /// 3. Kama Realtime inashindwa au inagoma: poll kila sekunde 2 (mara 6).
+  /// 1. Read the current status immediately (the IPN may have updated it).
+  /// 2. If still PENDING: use Supabase Realtime (`.stream()`) â€” faster.
+  /// 3. If Realtime fails or stalls: poll every 3 seconds (20 times).
   ///
-  /// Inarudisha [PesapalStatus.pending] kama bado haijathibitishwa.
+  /// Returns [PesapalStatus.pending] if it is still not confirmed.
   Future<PesapalStatus> waitForFinalStatus(
     String orderId, {
     Duration realtimeTimeout = _realtimeTimeout,
@@ -212,7 +216,7 @@ class PesapalService {
       return immediate;
     }
 
-    // Realtime (haipathi polling kama inafanya kazi).
+    // Realtime (skips polling when it works).
     try {
       final realtime = await _watchRealtime(orderId).timeout(realtimeTimeout);
       if (realtime == PesapalStatus.completed ||
@@ -220,13 +224,13 @@ class PesapalService {
         return realtime;
       }
     } catch (_) {
-      // Realtime imeshindwa / imeisha muda -> nenda kwa polling.
+      // Realtime failed / timed out -> fall back to polling.
     }
 
     return _pollStatus(orderId);
   }
 
-  /// Sikiliza mabadiliko ya rekodi kwa Realtime hadi status ya mwisho ifike.
+  /// Listen for record changes via Realtime until the final status arrives.
   Future<PesapalStatus> _watchRealtime(String orderId) {
     final completer = Completer<PesapalStatus>();
     StreamSubscription<List<Map<String, dynamic>>>? subscription;
@@ -259,7 +263,7 @@ class PesapalService {
     return completer.future;
   }
 
-  /// Polling: kila sekunde 2, mara 6 (kama Realtime haipatikani).
+  /// Polling: every 3 seconds, 20 times (when Realtime is unavailable).
   Future<PesapalStatus> _pollStatus(
     String orderId, {
     int attempts = _pollAttempts,
@@ -284,7 +288,7 @@ class PesapalService {
   // Helpers
   // ---------------------------------------------------------------------------
 
-  /// Badilisha rekodi ya `transactions` -> [PesapalStatus].
+  /// Convert a `transactions` record -> [PesapalStatus].
   static PesapalStatus statusFromRow(Map<String, dynamic>? row) {
     if (row == null) return PesapalStatus.unknown;
     return statusFromString(row['status']?.toString());
@@ -313,7 +317,7 @@ class PesapalService {
     return <String, dynamic>{};
   }
 
-  /// Edge Function inarudisha `{ "error": "..." }` kila inaposhindwa.
+  /// The Edge Function returns `{ "error": "..." }` whenever it fails.
   static String _messageFromError(
     dynamic details, [
     String fallback = 'Payment could not be started. Please try again.',

@@ -1,17 +1,17 @@
 /**
- * pesapal-return — callback_url: ukurasa mdogo wa HTML unaoonekana kwenye
- * webview ya mtumiaji baada ya kulipa.
+ * pesapal-return — callback_url: a small HTML page shown in the user's
+ * webview after paying.
  * ---------------------------------------------------------------------------
- * HAKUNA auth ya mtumiaji (PesaPal/webview inaifungua), kwa hiyo deploy kwa:
+ * There is NO user auth (PesaPal/the webview opens it), so deploy with:
  *   supabase functions deploy pesapal-return --no-verify-jwt
  *
- * Kazi yake:
- *  1. Inathibitisha status kwa PesaPal (fallback kama IPN imechelewa) na
- *     inasasisha "transactions" (+ coins kama COMPLETED).
- *  2. Inarudisha HTML nzuri inayomwambia mtumiaji arudi kwenye app.
+ * Its job:
+ *  1. Verify the status with PesaPal (fallback if the IPN is delayed) and
+ *     update "transactions" (+ coins when COMPLETED).
+ *  2. Return a nice HTML page telling the user to go back to the app.
  *
- * PaymentWebViewScreen inagundua URL hii (ina "pesapal-return") kisha
- * inasubiri status ya COMPLETED/FAILED kutoka jedwali la transactions.
+ * PaymentWebViewScreen detects this URL (it contains "pesapal-return") and
+ * then waits for the COMPLETED/FAILED status from the transactions table.
  */
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { htmlResponse, serviceRoleKey, supabaseUrl } from "../_shared/pesapal.ts";
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
         const result = await syncOrderStatus(admin, trackingId);
 
         if (result.status === "COMPLETED") {
-          state.headline = "Payment successful ";
+          state.headline = "Payment successful";
           state.detail = result.credited
             ? "Your coins have been added to your Pacific wallet. Enjoy!"
             : "Your payment was already confirmed — your coins are in your wallet.";

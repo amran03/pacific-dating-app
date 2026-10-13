@@ -1,12 +1,12 @@
 /**
- * PesaPal API 3.0 client — inatumika NA Edge Functions pekee (Deno).
+ * PesaPal API 3.0 client — used ONLY by Edge Functions (Deno).
  * ---------------------------------------------------------------------------
- * Hii ni module ya _shared: create-pesapal-order, pesapal-ipn,
- * pesapal-return na register-pesapal-ipn zote zina-import hapa.
+ * This is the _shared module: create-pesapal-order, pesapal-ipn,
+ * pesapal-return and register-pesapal-ipn all import from here.
  *
- * MUHIMU: consumer_key / consumer_secret ZINASOMWA kutoka Supabase
- * Edge Function secrets (Deno.env) — HAZIWEKWI kwenye code, hazipo
- * kwenye Flutter, hazipo kwenye git repo.
+ * IMPORTANT: consumer_key / consumer_secret are READ from Supabase
+ * Edge Function secrets (Deno.env) — they are NOT hardcoded, they are not
+ * in Flutter, and they are not in the git repo.
  *
  * Base URL (production): https://pay.pesapal.com/v3/api
  * Sandbox/test:          https://cybqa.pesapal.com/pesapalv3/api
@@ -17,12 +17,12 @@ export const PESAPAL_BASE_URL: string = (
     "https://pay.pesapal.com/v3/api"
 ).replace(/\/+$/, "");
 
-/** PesaPal token inaisha baada ya dakika 5 — tuna-cache kwa dakika 4. */
+/** The PesaPal token expires after 5 minutes — we cache it for 4 minutes. */
 const TOKEN_CACHE_MS = 4 * 60 * 1000;
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-/** CORS headers — zinaruhusu Flutter client kuita functions hizi. */
+/** CORS headers — they allow the Flutter client to call these functions. */
 export const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -49,14 +49,14 @@ export interface PesapalCredentials {
   consumerSecret: string;
 }
 
-/** Soma credentials kutoka Supabase secrets (kama hazipo -> error ya wazi). */
+/** Read credentials from Supabase secrets (missing -> clear error). */
 export function pesapalCredentials(): PesapalCredentials {
   const consumerKey = (Deno.env.get("PESAPAL_CONSUMER_KEY") ?? "").trim();
   const consumerSecret = (Deno.env.get("PESAPAL_CONSUMER_SECRET") ?? "").trim();
 
   if (!consumerKey || !consumerSecret) {
     throw new Error(
-      "PESAPAL_CONSUMER_KEY / PESAPAL_CONSUMER_SECRET hazijawekwa. " +
+      "PESAPAL_CONSUMER_KEY / PESAPAL_CONSUMER_SECRET are not set. " +
         "Run: supabase secrets set PESAPAL_CONSUMER_KEY=... PESAPAL_CONSUMER_SECRET=...",
     );
   }
@@ -64,14 +64,14 @@ export function pesapalCredentials(): PesapalCredentials {
   return { consumerKey, consumerSecret };
 }
 
-/** ipn_id ya PesaPal (inarudishwa na register-pesapal-ipn). */
+/** The PesaPal ipn_id (returned by register-pesapal-ipn). */
 export function pesapalIpnId(): string {
   const ipnId = (Deno.env.get("PESAPAL_IPN_ID") ?? "").trim();
 
   if (!ipnId) {
     throw new Error(
-      "PESAPAL_IPN_ID haijawekwa. Kwanza deploy register-pesapal-ipn, " +
-        "iite mara moja kupata ipn_id, kisha: supabase secrets set PESAPAL_IPN_ID=<ipn_id>",
+      "PESAPAL_IPN_ID is not set. First deploy register-pesapal-ipn, " +
+        "call it once to get the ipn_id, then: supabase secrets set PESAPAL_IPN_ID=<ipn_id>",
     );
   }
 
@@ -80,14 +80,14 @@ export function pesapalIpnId(): string {
 
 export function supabaseUrl(): string {
   const url = (Deno.env.get("SUPABASE_URL") ?? "").trim();
-  if (!url) throw new Error("SUPABASE_URL haipo kwenye environment ya function.");
+  if (!url) throw new Error("SUPABASE_URL is missing from the function environment.");
   return url;
 }
 
 export function serviceRoleKey(): string {
   const key = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
   if (!key) {
-    throw new Error("SUPABASE_SERVICE_ROLE_KEY haipo kwenye environment ya function.");
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY is missing from the function environment.");
   }
   return key;
 }
@@ -114,8 +114,8 @@ interface TokenResponse {
 }
 
 /**
- * Rudisha bearer token. Inacache token kwa dakika 4 (token inaisha dakika 5)
- * ili kila order/status check isifanye RequestToken mpya.
+ * Return a bearer token. The token is cached for 4 minutes (it expires in
+ * 5 minutes) so every order/status check doesn't request a new token.
  */
 export async function getToken(
   consumerKey: string,
@@ -149,7 +149,7 @@ export async function getToken(
   return data.token;
 }
 
-/** Token cache inaweza kufutwa (mfano PesaPal ikirudisha 401). */
+/** The token cache can be cleared (e.g. when PesaPal returns 401). */
 export function clearTokenCache(): void {
   cachedToken = null;
 }
@@ -193,7 +193,7 @@ export async function registerIPN(
   return data;
 }
 
-/** GET /URLSetup/GetIpnList — kutafuta IPN iliyokwisha sajiliwa (kuepuka duplicates). */
+/** GET /URLSetup/GetIpnList — look up an already-registered IPN (avoids duplicates). */
 export async function getIpnList(token: string): Promise<IpnRegistration[]> {
   const res = await fetch(`${PESAPAL_BASE_URL}/URLSetup/GetIpnList`, {
     method: "GET",
@@ -224,14 +224,14 @@ export interface PesapalBillingAddress {
 }
 
 export interface SubmitOrderPayload {
-  /** Merchant reference / order id — LAZIMA iwe unique. */
+  /** Merchant reference / order id — MUST be unique. */
   id: string;
   currency: string;
   amount: number;
   description: string;
-  /** URL ya kurudi baada ya malipo (callback_url). */
+  /** The URL to return to after payment (callback_url). */
   callback_url: string;
-  /** ipn_id iliyosajiliwa (PESAPAL_IPN_ID). */
+  /** The registered ipn_id (PESAPAL_IPN_ID). */
   notification_id: string;
   billing_address: PesapalBillingAddress;
   branch?: string;
@@ -324,7 +324,7 @@ export async function getTransactionStatus(
 // ---------------------------------------------------------------------------
 export type PaymentDbStatus = "PENDING" | "COMPLETED" | "FAILED";
 
-/** Badilisha PesaPal status_code -> status ya jedwali la transactions. */
+/** Map PesaPal status_code -> transactions table status. */
 export function mapStatusCodeToDbStatus(
   statusCode?: number,
   description?: string,
@@ -343,13 +343,13 @@ export function mapStatusCodeToDbStatus(
     return "FAILED";
   }
 
-  // status_code 0 (INVALID) na kila kitu kingine = bado PENDING.
+  // status_code 0 (INVALID) and anything else = still PENDING.
   return "PENDING";
 }
 
-/** Tengeneze order id: "PACIFIC-<uid>-<timestamp>" (punguza urefu ikihitajika). */
+/** Build the order id: "PACIFIC-<uid>-<timestamp>" (shortened if needed). */
 export function buildOrderId(uid: string, now: number = Date.now()): string {
   const full = `PACIFIC-${uid}-${now}`;
-  // Merchant reference ya PesaPal: hifadhi chini ya chars 50.
+  // PesaPal merchant reference: keep it under 50 chars.
   return full.length <= 50 ? full : `PACIFIC-${uid.slice(0, 8)}-${now}`;
 }

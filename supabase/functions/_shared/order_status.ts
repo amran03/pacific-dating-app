@@ -1,12 +1,12 @@
 /**
- * Shared status-sync logic — inathibitisha malipo kwa PesaPal kisha
- * inasasisha jedwali la "transactions" (na coins) kwa service_role.
+ * Shared status-sync logic — verifies the payment with PesaPal and then
+ * updates the "transactions" table (and coins) using service_role.
  *
- * Inatumika na:
- *   - pesapal-ipn     (webhook ambayo PesaPal inaipiga yenyewe)
- *   - pesapal-return  (callback fallback, kama IPN imechelewa)
+ * Used by:
+ *   - pesapal-ipn     (webhook that PesaPal calls by itself)
+ *   - pesapal-return  (callback fallback, if the IPN is delayed)
  *
- * IDEMPOTENT: coins zinaongezwa mara moja tu (pesapal_credit_coins).
+ * IDEMPOTENT: coins are credited only once (pesapal_credit_coins).
  */
 import type { SupabaseClient } from "jsr:@supabase/supabase-js@2";
 import {
@@ -27,7 +27,7 @@ export interface SyncResult {
   message?: string;
 }
 
-/** Tafuta OrderTrackingId iliyohifadhiwa kwa order id (merchant reference). */
+/** Look up the stored OrderTrackingId for an order id (merchant reference). */
 export async function resolveOrderTrackingId(
   admin: SupabaseClient,
   merchantReference: string,
@@ -78,14 +78,14 @@ export async function syncOrderStatus(
     .maybeSingle();
 
   if (txError) {
-    throw new Error(`Imeshindwa kusoma transaction: ${txError.message}`);
+    throw new Error(`Failed to read the transaction: ${txError.message}`);
   }
   if (!tx) {
     return { ...base, status: dbStatus };
   }
 
   if (dbStatus === "COMPLETED") {
-    // Atomic + idempotent: coins zinaongezwa MARA MOJA tu kwa order hii.
+    // Atomic + idempotent: coins are credited ONCE per order.
     const { data: credited, error: rpcError } = await admin.rpc(
       "pesapal_credit_coins",
       {
@@ -97,7 +97,7 @@ export async function syncOrderStatus(
 
     if (rpcError) {
       throw new Error(
-        `Imeshindwa kuongeza coins (pesapal_credit_coins): ${rpcError.message}`,
+        `Failed to credit coins (pesapal_credit_coins): ${rpcError.message}`,
       );
     }
 
@@ -118,13 +118,13 @@ export async function syncOrderStatus(
       .from("transactions")
       .update({ ...auditFields, status: "FAILED" })
       .eq("id", orderId)
-      .eq("status", "PENDING"); // usibadilishe order iliyokwisha COMPLETED
+      .eq("status", "PENDING"); // never change an order that is already COMPLETED
 
-    if (error) throw new Error(`Imeshindwa kuweka FAILED: ${error.message}`);
+    if (error) throw new Error(`Failed to set FAILED: ${error.message}`);
     return { ...base, status: "FAILED" };
   }
 
-  // Bado PENDING: hifadhi tu taarifa za hivi punde (status haibadiliki).
+  // Still PENDING: just store the latest details (the status stays unchanged).
   if (tx.status === "PENDING") {
     const { error } = await admin
       .from("transactions")
@@ -132,7 +132,7 @@ export async function syncOrderStatus(
       .eq("id", orderId)
       .eq("status", "PENDING");
 
-    if (error) throw new Error(`Imeshindwa kusasisha transaction: ${error.message}`);
+    if (error) throw new Error(`Failed to update the transaction: ${error.message}`);
   }
 
   return { ...base, status: "PENDING" };

@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="sw">
+<head>
+<meta charset="UTF-8">
+<title>Pacific Dating App - Muundo Kamili wa Programu</title>
+<style>
+  @page { size: A4; margin: 18mm 14mm 16mm 14mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Tahoma, sans-serif; color: #1f2430;
+         font-size: 10.2pt; line-height: 1.55; margin: 0; }
+  h1 { font-size: 20pt; color: #b3204a; margin: 0 0 6px 0; }
+  h2 { font-size: 14pt; color: #fff; background: #d63a63; padding: 7px 12px;
+       margin: 26px 0 12px 0; border-radius: 5px; page-break-after: avoid; }
+  h3 { font-size: 11.8pt; color: #b3204a; margin: 18px 0 7px 0;
+       border-left: 4px solid #f4a8bb; padding-left: 9px; page-break-after: avoid; }
+  h4 { font-size: 10.5pt; color: #4a2b38; margin: 13px 0 5px 0; page-break-after: avoid; }
+  p { margin: 5px 0; }
+  code { font-family: Consolas, "Courier New", monospace; font-size: 9pt;
+         background: #f2f3f7; padding: 1px 4px; border-radius: 3px; color: #a01a3f; }
+  pre { font-family: Consolas, "Courier New", monospace; font-size: 8.1pt;
+        background: #fbfbfd; border: 1px solid #e2e4ec; border-left: 4px solid #d63a63;
+        padding: 9px 11px; border-radius: 4px; line-height: 1.42;
+        white-space: pre-wrap; word-break: break-word; margin: 8px 0; color: #262b38; }
+  table { width: 100%; border-collapse: collapse; margin: 9px 0; font-size: 9.1pt; }
+  th { background: #fdeaef; color: #8f1a3c; text-align: left; padding: 6px 8px;
+       border: 1px solid #f2c6d1; font-weight: 600; }
+  td { padding: 5px 8px; border: 1px solid #e6e8ee; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  ul, ol { margin: 5px 0; padding-left: 20px; }
+  li { margin: 2.5px 0; }
+  .cover { text-align: center; padding: 62px 20px 30px 20px;
+           border-bottom: 3px double #d63a63; margin-bottom: 22px; }
+  .cover .logo { font-size: 40pt; font-weight: 700; color: #d63a63; letter-spacing: 2px; }
+  .cover .sub { font-size: 13pt; color: #56606f; margin-top: 6px; }
+  .cover .meta { margin-top: 26px; display: inline-block; text-align: left;
+                 background: #fbf7f9; border: 1px solid #f2c6d1; border-radius: 6px;
+                 padding: 14px 22px; font-size: 9.8pt; }
+  .cover .meta b { color: #b3204a; }
+  .box { background: #f6fbf7; border: 1px solid #c8e6cf; border-left: 4px solid #43a047;
+         border-radius: 4px; padding: 9px 12px; margin: 10px 0; font-size: 9.6pt; }
+  .warn { background: #fffbf0; border: 1px solid #f2dfae; border-left: 4px solid #e8a33d;
+          border-radius: 4px; padding: 9px 12px; margin: 10px 0; font-size: 9.6pt; }
+  .info { background: #f4f8fd; border: 1px solid #cadff2; border-left: 4px solid #4285c9;
+          border-radius: 4px; padding: 9px 12px; margin: 10px 0; font-size: 9.6pt; }
+  .badge { display: inline-block; background: #d63a63; color: #fff; font-size: 8.2pt;
+           padding: 1.5px 7px; border-radius: 9px; margin-right: 4px; }
+  .badge.alt { background: #4b7bab; }
+  .badge.g { background: #43a047; }
+  .toc { font-size: 10pt; }
+  .toc .lvl2 { margin-left: 18px; font-size: 9.4pt; color: #4a5464; }
+  .newpage { page-break-before: always; }
+  .pagebreak { page-break-before: always; }
+  .nobreak { page-break-inside: avoid; }
+  small { color: #6b7484; }
+  .kpi { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .kpi div { flex: 1 1 30%; background: #fbf7f9; border: 1px solid #f2c6d1;
+             border-radius: 5px; padding: 8px 10px; text-align: center; }
+  .kpi b { display: block; font-size: 15pt; color: #d63a63; }
+  .kpi span { font-size: 8.4pt; color: #5d6675; }
+  footer { margin-top: 24px; border-top: 1px solid #e6e8ee; padding-top: 8px;
+           font-size: 8.2pt; color: #7a8494; text-align: center; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="logo">PACIFIC</div>
+  <div class="sub">Dating App &mdash; Muundo Kamili wa Programu</div>
+  <div class="sub" style="font-size:10.5pt;margin-top:14px;">
+    Mwongozo wa kiufundi: muundo wa folda, tabaka, huduma, database,<br>
+    mtiririko wa mtumiaji, usanidi wa build na utoaji (release).
+  </div>
+  <div class="meta">
+    <b>Jina la Programu:</b> Pacific Dating App<br>
+    <b>Version:</b> 1.0.0 (versionCode 1)<br>
+    <b>Jukwaa:</b> Flutter (Android, iOS, Web, Windows, macOS, Linux)<br>
+    <b>Backend:</b> Supabase &mdash; PostgreSQL, Auth, Realtime, Storage, Edge Functions<br>
+    <b>Malipo:</b> PesaPal (Tanzania) &mdash; 1 Coin = 25 TZS<br>
+    <b>Lugha:</b> Dart 3.x / TypeScript / SQL<br>
+    <b>Hali:</b> Release v1.0.0 imetolewa GitHub<br>
+    <b>Tarehe ya hati:</b> 18 Septemba 2026
+  </div>
+</div>
+
+<h2>Yaliyomo (Table of Contents)</h2>
+<ol class="toc">
+  <li><b>Muhtasari wa Mradi</b> &mdash; takwimu, teknolojia, vifurushi</li>
+  <li><b>Muundo wa Folda</b> &mdash; mti kamili wa faili zote</li>
+  <li><b>Tabaka za Usanifu (Architecture)</b> &mdash; jinsi msimbo umeandaliwa</li>
+  <li><b>Tabaka la Core</b>
+    <ul>
+      <li class="lvl2">4.1 Config &amp; Constants &mdash; usanidi na rangi</li>
+      <li class="lvl2">4.2 Localization &amp; Theme &mdash; lugha na mandhari</li>
+      <li class="lvl2">4.3 Huduma za Msingi &mdash; huduma 13 za core</li>
+      <li class="lvl2">4.4 Widgets za Core &mdash; viungo vinavyotumika kila mahali</li>
+    </ul>
+  </li>
+  <li><b>Features (Vipengele)</b>
+    <ul>
+      <li class="lvl2">5.1 Auth &mdash; kuingia, kujisajili, nywila</li>
+      <li class="lvl2">5.2 Auth Onboarding &mdash; hatua za kuanzisha akaunti</li>
+      <li class="lvl2">5.3 Chat &mdash; gumzo, simu, zawadi, likes</li>
+      <li class="lvl2">5.4 Dashboard &mdash; skrini kuu na tabs</li>
+      <li class="lvl2">5.5 Discover &mdash; vichujio vya kutafuta</li>
+      <li class="lvl2">5.6 Profile &mdash; wasifu, coins, VIP, sheria</li>
+    </ul>
+  </li>
+  <li><b>Database (Supabase PostgreSQL)</b> &mdash; majedwali 11, RLS, RPC</li>
+  <li><b>Edge Functions &amp; Mtiririko wa Malipo (PesaPal)</b></li>
+  <li><b>Mtiririko wa Mtumiaji (User Flows)</b> &mdash; safari 6 kuu</li>
+  <li><b>Usanidi wa Android</b> &mdash; ruhusa, toolchain, kusaini</li>
+  <li><b>Majaribio (Tests), Build &amp; Release</b></li>
+  <li><b>Usalama (Security) &amp; Vidokezo vya Uendelezaji</b></li>
+</ol>
+
+<h2>1. Muhtasari wa Mradi</h2>
+
+<p><b>Pacific Dating App</b> ni programu ya kuchumbiana iliyojengwa kwa
+<b>Flutter</b> na <b>Supabase</b> kama backend. Inaunga mkono usajili wa watumiaji,
+kugundua watu wengine kwa eneo (GPS), kupenda/kukataa (swipe), kulinganisha
+(matching), gumzo la wakati halisi, kutuma zawadi kwa coins, simu za sauti na
+video (WebRTC), na kununua coins kupitia <b>PesaPal</b>.</p>
+
+<div class="kpi">
+  <div><b>57</b><span>Faili za Dart (lib/)</span></div>
+  <div><b>18,129</b><span>Mistari ya msimbo wa Dart</span></div>
+  <div><b>52</b><span>Madarasa (classes)</span></div>
+  <div><b>11</b><span>Majedwali ya Database</span></div>
+  <div><b>6</b><span>Edge Functions (Deno/TS)</span></div>
+  <div><b>6</b><span>Majukwaa yanayotumika</span></div>
+</div>
+
+<h3>1.1 Teknolojia Zinazotumika (Tech Stack)</h3>
+<table>
+  <tr><th style="width:22%">Tabaka</th><th style="width:31%">Teknolojia</th><th>Kazi / Maelezo</th></tr>
+  <tr><td>Frontend</td><td>Flutter 3.44.2 (stable), Dart 3.x</td><td>UI ya jukwaa-msalaba; Material 3; fonti ya Poppins</td></tr>
+  <tr><td>Backend</td><td>Supabase</td><td>Auth, PostgreSQL, Realtime, Storage, Edge Functions</td></tr>
+  <tr><td>Database</td><td>PostgreSQL 15+</td><td>Majedwali 11, RLS policies, RPC functions</td></tr>
+  <tr><td>Malipo</td><td>PesaPal API 3.0</td><td>Kununua coins; 1 Coin = 25 TZS; IPN webhook</td></tr>
+  <tr><td>Simu (Calls)</td><td>flutter_webrtc (libjingle)</td><td>Simu za video/sauti za wakati halisi</td></tr>
+  <tr><td>Arifa</td><td>flutter_local_notifications</td><td>Arifa za mfumo + badges za unread</td></tr>
+  <tr><td>Edge Functions</td><td>Deno / TypeScript</td><td>Usalama wa malipo upande wa server</td></tr>
+  <tr><td>Build</td><td>Gradle 8.14.3, AGP 8.11.1, Kotlin 2.2.20, JDK 21</td><td>Ujenzi wa Android release APK</td></tr>
+</table>
+
+<h3>1.2 Vifurushi Vikuu (Key Dependencies)</h3>
+<table>
+  <tr><th style="width:33%">Kifurushi</th><th style="width:12%">Version</th><th>Kazi</th></tr>
+  <tr><td><code>supabase_flutter</code></td><td>^2.8.3</td><td>Auth, database, realtime, storage</td></tr>
+  <tr><td><code>google_fonts</code></td><td>^6.2.1</td><td>Fonti ya Poppins kote app</td></tr>
+  <tr><td><code>shared_preferences</code></td><td>^2.3.2</td><td>Kuhifadhi mapendeleo kwenye kifaa</td></tr>
+  <tr><td><code>image_picker</code></td><td>^1.1.2</td><td>Kuchagua picha za wasifu</td></tr>
+  <tr><td><code>record</code></td><td>^6.2.1</td><td>Kurekodi sauti (voice notes)</td></tr>
+  <tr><td><code>audioplayers</code></td><td>^6.0.0</td><td>Kucheza sauti (voice notes, ringtone)</td></tr>
+  <tr><td><code>geolocator</code></td><td>^13.0.2</td><td>GPS &mdash; kuhesabu umbali kati ya watumiaji</td></tr>
+  <tr><td><code>flutter_local_notifications</code></td><td>^17.2.3</td><td>Arifa za mfumo za simu</td></tr>
+  <tr><td><code>flutter_webrtc</code></td><td>^0.12.4</td><td>Simu za sauti/video (WebRTC)</td></tr>
+  <tr><td><code>webview_flutter</code></td><td>^4.14.1</td><td>Ukurasa wa malipo ya PesaPal</td></tr>
+  <tr><td><code>permission_handler</code></td><td>^11.3.1</td><td>Ruhusa za kamera, maikrofoni, eneo</td></tr>
+  <tr><td><code>path_provider</code></td><td>^2.1.4</td><td>Njia za kuhifadhi faili za muda</td></tr>
+  <tr><td><code>flutter_launcher_icons</code></td><td>^0.13.1</td><td>Kutengeneza aikoni za app (dev)</td></tr>
+  <tr><td><code>flutter_lints</code></td><td>^6.0.0</td><td>Kanuni za ubora wa msimbo (dev)</td></tr>
+</table>
+
+<div class="info">
+  <b>Muundo wa folda kuu:</b> <code>lib/</code> (msimbo wa Dart),
+  <code>supabase/</code> (migrations + Edge Functions),
+  <code>android/ ios/ web/ windows/ macos/ linux/</code> (majukwaa),
+  <code>test/</code> (majaribio), <code>docs/</code> (nyaraka),
+  <code>assets/images/</code> (aikoni ya app).
+</div>
+
+<h2>2. Muundo wa Folda (Full Structure)</h2>
+
+<p>Programu imepangwa kwa <b>feature-first architecture</b>: kila kipengele
+(feature) kina folda yake yenye <code>data/</code>, <code>domain/</code> na
+<code>presentation/</code>. Msimbo unaotumika kila mahali unabaki kwenye
+<code>core/</code>.</p>
+
+<h3>2.1 Mti wa <code>lib/</code> &mdash; msimbo wa Dart (57 faili, 18,129 mistari)</h3>
+<pre>lib/
+|
+|-- main.dart                                 (2.8 KB)  Kuingia kwa app: init Supabase, notifications, theme
+|
+|-- core/                                              TABAKA LA MSINGI (inatumika kila mahali)
+|   |-- config/
+|   |   `-- app_config.dart                   (1.4 KB)  URL + publishable key ya Supabase (--dart-define)
+|   |-- constants/
+|   |   `-- app_color.dart                    (1.6 KB)  Rangi za app (AppColors)
+|   |-- localization/
+|   |   |-- app_language.dart                 (1.4 KB)  Lugha (EN/SW) - ChangeNotifier
+|   |   `-- app_theme.dart                    (1.5 KB)  Mandhari (light/dark) - ChangeNotifier
+|   |-- services/                                       huduma 13 kuu
+|   |   |-- supabase_service.dart             (1.5 KB)  Kuanzisha Supabase client
+|   |   |-- supabase_db_service.dart          (0.9 KB)  Kufikia database
+|   |   |-- auth_gate.dart                    (2.7 KB)  Kuamua skrini ya kuanzia (auth flow)
+|   |   |-- auth_errors.dart                  (2.0 KB)  Kutafsiri makosa ya Supabase Auth
+|   |   |-- core_error_service.dart           (1.5 KB)  Makosa ya jumla + ujumbe kwa mtumiaji
+|   |   |-- validation_service.dart           (2.1 KB)  Kuthibitisha email, nywila, jina, umri
+|   |   |-- matchmaking_service.dart         (24.8 KB)  &lt;&lt; LOGIC KUU: discover, swipe, match, coins
+|   |   |-- notification_service.dart        (16.0 KB)  Arifa za mfumo + realtime + badge
+|   |   |-- call_service.dart                 (6.4 KB)  WebRTC signaling (offer/answer/ICE)
+|   |   |-- presence_service.dart             (3.1 KB)  Online/offline status
+|   |   |-- presence_tracker.dart             (4.2 KB)  Widget ya kufuatilia presence
+|   |   |-- storage_service.dart              (1.4 KB)  Kupakia picha kwenye Supabase Storage
+|   |   |-- user_prefs.dart                   (4.1 KB)  Mapendeleo ya mtumiaji kwenye kifaa
+|   |   `-- vip_service.dart                  (2.0 KB)  Hali ya VIP (manufaa ya subscription)
+|   `-- widgets/
+|       |-- heart_loader.dart                 (2.7 KB)  Loader ya moyo inayopiga (animation)
+|       `-- supabase_setup_screen.dart        (4.8 KB)  Skrini ya mwongozo kama Supabase haijasanidiwa
+|
+|-- features/                                          VIPENGELE (feature-first)
+|   |-- auth/presentation/                              kuingia na kujisajili
+|   |   |-- signup_screen.dart               (16.4 KB)  Kujisajili kwa email/phone
+|   |   |-- login_screen.dart                 (9.6 KB)  Kuingia
+|   |   |-- create_password_screen.dart       (9.7 KB)  Kutengeneza nywila
+|   |   |-- reset_password_screen.dart       (13.0 KB)  Kusahau nywila + recovery code
+|   |   |-- new_password_screen.dart          (6.2 KB)  Kuweka nywila mpya
+|   |   |-- setup_account_screen.dart        (37.2 KB)  Usanidi kamili wa wasifu (ruhusa, GPS)
+|   |   `-- profile_setup_screen.dart        (30.0 KB)  Usanidi wa wasifu (toleo la awali)
+|   |-- auth_onboarding/presentation/screens/           hatua za kuanzisha akaunti
+|   |   |-- welcome_screen.dart              (19.8 KB)  Skrini ya kukaribisha
+|   |   |-- name_screen.dart                  (4.3 KB)  Jina
+|   |   |-- birthday_screen.dart              (5.7 KB)  Tarehe ya kuzaliwa (umri)
+|   |   |-- gender_screen.dart                (4.6 KB)  Jinsia na unayependa
+|   |   `-- photo_upload_screen.dart          (7.1 KB)  Kupakia picha ya wasifu
+|   |-- chat/                                           gumzo, simu, zawadi
+|   |   |-- domain/models/
+|   |   |   |-- chat_model.dart               (0.5 KB)  Model ya chat room
+|   |   |   `-- gift_model.dart               (3.4 KB)  Model ya zawadi (GiftModel)
+|   |   `-- presentation/
+|   |       |-- chat_list_screen.dart        (36.7 KB)  Orodha ya gumzo + missed calls
+|   |       |-- individual_chat_screen.dart  (95.7 KB)  &lt;&lt; FAILI KUBWA ZAIDI: gumzo kamili
+|   |       |-- call_screen.dart             (38.6 KB)  Skrini ya simu ya video/sauti
+|   |       |-- likes_screen.dart             (7.9 KB)  Waliokupenda (likes)
+|   |       `-- widgets/gift_modal_bottom_sheet.dart (22.9 KB)  Kutuma zawadi
+|   |-- dashboard/presentation/screens/
+|   |   `-- main_dashboard_screen.dart       (52.6 KB)  &lt;&lt; SKRINI KUU: tabs, Discover, notifications
+|   |-- discover/presentation/widgets/
+|   |   `-- discover_filter_bottom_sheet.dart (6.0 KB)  Vichujio vya Discover
+|   `-- profile/                                        wasifu, coins, VIP, sheria
+|       |-- data/user_model.dart              (8.6 KB)  Model ya mtumiaji (fields 43)
+|       `-- presentation/
+|           |-- profile_screen.dart          (42.7 KB)  Wasifu wa mimi
+|           |-- public_profile_screen.dart   (24.7 KB)  Wasifu wa mtu mwingine
+|           |-- screens/
+|           |   |-- buy_coins_screen.dart    (15.2 KB)  Kununua coins (vifurushi)
+|           |   |-- payment_webview_screen.dart (11.6 KB) WebView ya malipo ya PesaPal
+|           |   |-- badge_store_screen.dart  (13.7 KB)  Duka la badges
+|           |   |-- vip_purchase_screen.dart  (8.1 KB)  Kununua VIP
+|           |   |-- edit_profile_screen.dart (13.0 KB)  Kuhariri wasifu
+|           |   |-- search_screen.dart        (7.1 KB)  Kutafuta watumiaji
+|           |   |-- privacy_policy_screen.dart (6.6 KB) Sera ya faragha
+|           |   `-- terms_conditions_screen.dart (6.0 KB) Masharti na vigezo
+|           `-- widgets/
+|               |-- legal_page_scaffold.dart (11.0 KB)  Kiolezo cha kurasa za kisheria
+|               `-- profile_image_with_ring.dart (6.0 KB) Picha ya wasifu + pete ya badge
+|
+|-- screens/
+|   `-- pacific_launch_screen.dart            (5.0 KB)  Skrini ya kufungua (launch/splash)
+|
+`-- services/
+    `-- pesapal_service.dart                 (10.4 KB)  PesaPal API client (1 Coin = 25 TZS)</pre>
+
+<h3>2.2 Mti wa <code>supabase/</code> &mdash; Backend (migrations + Edge Functions)</h3>
+<pre>supabase/
+|-- config.toml                                   (0.8 KB)  Usanidi wa Supabase CLI (verify_jwt)
+|-- PESAPAL_SETUP.md                              (9.1 KB)  Hatua za kusanidi PesaPal
+|-- functions/                                              EDGE FUNCTIONS (Deno / TypeScript)
+|   |-- _shared/
+|   |   |-- pesapal.ts                           (11.0 KB)  PesaPal API 3.0 client + token cache
+|   |   `-- order_status.ts                       (4.1 KB)  Kusawazisha hali ya malipo (idempotent)
+|   |-- create-pesapal-order/index.ts             (7.9 KB)  Kutengeneza oda (server-side amounts)
+|   |-- pesapal-ipn/index.ts                      (5.4 KB)  Webhook ya PesaPal (bila JWT)
+|   |-- pesapal-return/index.ts                   (5.7 KB)  Callback URL + HTML page
+|   `-- register-pesapal-ipn/index.ts             (4.0 KB)  Kusajili IPN URL (admin secret)
+`-- migrations/
+    |-- 20260917120000_pesapal_payments.sql      (10.0 KB)  transactions + RLS + pesapal_credit_coins()
+    |-- 20260917130000_likes_visibility.sql       (1.8 KB)  RLS ya swipes (likes) + realtime
+    `-- 20260918090000_notifications_messages_visibility.sql (4.0 KB) RLS ya notifications/messages</pre>
+
+<h3>2.3 Folda Nyingine</h3>
+<table>
+  <tr><th style="width:26%">Njia</th><th>Maelezo</th></tr>
+  <tr><td><code>test/</code></td><td><code>pesapal_service_test.dart</code> (majaribio ya malipo) na <code>widget_test.dart</code> (smoke test)</td></tr>
+  <tr><td><code>assets/images/</code></td><td><code>app_icon.png</code> &mdash; aikoni ya app</td></tr>
+  <tr><td><code>android/</code></td><td>Usanidi wa Android: Gradle, manifest, signing, ruhusa</td></tr>
+  <tr><td><code>ios/ macos/</code></td><td>Miradi ya Xcode (Runner, AppDelegate, SceneDelegate)</td></tr>
+  <tr><td><code>windows/ linux/</code></td><td>Miradi ya desktop (CMake / Win32 runner)</td></tr>
+  <tr><td><code>web/</code></td><td>index.html + manifest ya wavuti</td></tr>
+  <tr><td><code>docs/</code></td><td>Hati hii na nyaraka nyingine za mradi</td></tr>
+  <tr><td><code>RELEASE.md</code></td><td>Mwongozo wa build, kusaini, Play Store na sideload</td></tr>
+  <tr><td><code>README.md</code></td><td>Muhtasari + hatua za kusanidi Supabase</td></tr>
+  <tr><td><code>supabase_schema.sql</code></td><td>Schema kamili ya database (ku-run mara moja kwenye SQL Editor)</td></tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2>3. Tabaka za Usanifu (Architecture Layers)</h2>
+
+<p>Programu ina tabaka tano. Kila tabaka linawasiliana tu na lile lililo chini yake,
+kwa hiyo mabadiliko kwenye database hayavunji UI.</p>
+
+<table>
+  <tr><th style="width:6%">#</th><th style="width:22%">Tabaka</th><th style="width:26%">Mahali</th><th>Kazi</th></tr>
+  <tr>
+    <td>1</td>
+    <td><b>UI / Presentation</b></td>
+    <td><code>lib/features/*/presentation/</code>, <code>lib/screens/</code></td>
+    <td>Widgja za Flutter zinazomwonyesha mtumiaji. Zinatumia <code>setState</code> na <code>ChangeNotifier</code> (kwa lugha/mandhari). Hazina SQL wala HTTP.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td><b>Services / Logic</b></td>
+    <td><code>lib/core/services/</code>, <code>lib/services/</code></td>
+    <td>Biashara-logic yote: matchmaking, malipo, simu, arifa, presence. Hapa ndipo <code>matchmaking_service.dart</code> (24.8 KB) na <code>notification_service.dart</code> (16.0 KB) zinapokaa.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td><b>Data / Models</b></td>
+    <td><code>lib/features/*/data/</code>, <code>lib/features/*/domain/models/</code></td>
+    <td>Madaraja ya data: <code>UserModel</code> (fields 43), <code>ChatModel</code>, <code>GiftModel</code>. Zinabadilisha JSON ya Supabase kuwa aina salama za Dart.</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><b>Backend (Supabase)</b></td>
+    <td><code>supabase/migrations/</code>, <code>supabase/functions/</code></td>
+    <td>PostgreSQL yenye Row Level Security, Edge Functions za Deno za malipo ya PesaPal, Realtime, na Storage buckets.</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td><b>Platform</b></td>
+    <td><code>android/</code>, <code>ios/</code>, n.k.</td>
+    <td>Usanidi wa OS: ruhusa (camera, mic, location), signing, aikoni, manifest.</td>
+  </tr>
+</table>
+
+<h3>3.1 Mtiririko wa data (mfano: swipe)</h3>
+<pre>Mtumiaji afinya "like"
+      |
+      v
+[UI]        main_dashboard_screen.dart  (Discover tab)
+      |
+      v
+[SERVICE]   matchmaking_service.dart -> swipe(userId, targetId, isLike)
+      |
+      v
+[DATA]      Supabase SDK -> table 'swipes'
+      |
+      v
+[BACKEND]   PostgreSQL + RLS + trigger (huunda 'matches' ikiwa pande zote zimependa)
+      |
+      v
+[REALTIME]  Mabadiliko yanasukumwa kwa wote wawili
+      |
+      v
+[UI]        Match dialog + chat room mpya + notification</pre>
+
+<h3>3.2 Kanuni za usanifu zilizofuatwa</h3>
+<ul>
+  <li><b>Feature-first:</b> kila kipengele kina folda yake; hakuna "god folder" ya screens.</li>
+  <li><b>Single source of truth:</b> Supabase ndio chanzo kikuu; kifaa kinahifadhi tu mapendeleo (lugha, theme, token) kwa <code>SharedPreferences</code>.</li>
+  <li><b>Usalama wa upande wa server:</b> bei ya coins na TZS huhesabiwa kwenye Edge Function, kamwe kwenye simu &mdash; ili mtumiaji asibadilishe bei.</li>
+  <li><b>Idempotent:</b> <code>pesapal_credit_coins()</code> inaweza kuitwa mara nyingi bila kutoa coins mara mbili.</li>
+  <li><b>Lugha mbili:</b> <code>AppLanguage</code> (EN/SW) ni <code>ChangeNotifier</code> inayotumika kila skrini.</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h2>4. Tabaka la Core (<code>lib/core/</code>)</h2>
+
+<p>Tabaka hili lina msimbo unaotumika katika skrini zote. Kila huduma (service) ni
+darasa la <b>singleton</b> au lenye methods za <b>static</b>, hivyo hali moja
+inashirikiwa kote app.</p>
+
+<h3>4.1 Config &amp; Constants</h3>
+<table>
+  <tr><th style="width:30%">Faili</th><th>Maelezo</th></tr>
+  <tr>
+    <td><code>config/app_config.dart</code></td>
+    <td>Inasoma <code>SUPABASE_URL</code> na <code>SUPABASE_PUBLISHABLE_KEY</code> kutoka
+    <code>--dart-define</code> wakati wa build, au kutoka faili moja kwa moja.
+    Ina <code>isConfigured</code> flag: kama Supabase haijasanidiwa, app inaonyesha
+    <code>supabase_setup_screen.dart</code> badala ya kuanguka (crash).</td>
+  </tr>
+  <tr>
+    <td><code>constants/app_color.dart</code></td>
+    <td>Darasa la <code>AppColors</code>: rangi kuu ya Pacific (pinki #D63A63),
+    rangi za background, maandishi, mipaka, na rangi za hali (online/offline).</td>
+  </tr>
+</table>
+
+<h3>4.2 Localization &amp; Theme</h3>
+<table>
+  <tr><th style="width:30%">Faili</th><th>Maelezo</th></tr>
+  <tr>
+    <td><code>localization/app_language.dart</code></td>
+    <td><code>AppLanguage extends ChangeNotifier</code> &mdash; inahifadhi lugha
+    iliyochaguliwa (<b>EN</b> au <b>SW</b>) kwa <code>SharedPreferences</code>, na
+    <code>notifyListeners()</code> husababisha UI yote kubadilika mara moja.
+    Hii ni msingi wa maandishi ya Kiswahili/Kingereza kote app.</td>
+  </tr>
+  <tr>
+    <td><code>localization/app_theme.dart</code></td>
+    <td><code>AppTheme extends ChangeNotifier</code> &mdash; mandhari ya
+    <b>light/dark</b>, pia inahifadhiwa kwenye kifaa. Inatengeneza
+    <code>ThemeData</code> inayotumia fonti ya Poppins.</td>
+  </tr>
+</table>
+<h3>4.3 Huduma za Msingi (Core Services)</h3>
+<p>Hizi ni huduma 13. Kila moja imeorodheshwa na methods zake kuu:</p>
+
+<table>
+  <tr><th style="width:25%">Huduma</th><th style="width:7%">KB</th><th>Kazi na Methods kuu</th></tr>
+  <tr>
+    <td><code>supabase_service.dart</code></td><td>1.5</td>
+    <td>Kuanzisha muunganisho wa Supabase (<code>initialize()</code>) na kuchukua
+    orodha ya zawadi (<code>fetchGifts()</code>).</td>
+  </tr>
+  <tr>
+    <td><code>supabase_db_service.dart</code></td><td>0.9</td>
+    <td>Kuandika na kusikiliza wasifu: <code>saveUserProfile(UserModel)</code>,
+    <code>streamUserProfile(uid)</code> &mdash; inatoa <code>Stream</code> ya realtime.</td>
+  </tr>
+  <tr>
+    <td><code>auth_gate.dart</code></td><td>2.7</td>
+    <td>Darasa la <code>Widget</code> linaloamua skrini ya kuanzia: kama mtumiaji
+    hajalogin &rarr; <code>WelcomeScreen</code>; kama wasifu haujakamilika &rarr;
+    <code>SetupAccountScreen</code>; vinginevyo &rarr; <code>MainDashboardScreen</code>.</td>
+  </tr>
+  <tr>
+    <td><code>auth_errors.dart</code></td><td>2.0</td>
+    <td><code>friendlyAuthError(Object)</code> &mdash; inatafsiri makosa ya Supabase Auth
+    (nywila hafifu, email imetumika, n.k.) kuwa ujumbe rafiki kwa mtumiaji.</td>
+  </tr>
+  <tr>
+    <td><code>core_error_service.dart</code></td><td>1.5</td>
+    <td><code>showError(context, message)</code> (SnackBar yenye rangi) na
+    <code>mapExceptionToMessage(exception)</code>.</td>
+  </tr>
+  <tr>
+    <td><code>validation_service.dart</code></td><td>2.1</td>
+    <td>Kuthibitisha pembejeo: <code>validateName</code>, <code>validatePhone</code>,
+    <code>validateAge</code> (miaka 18+), <code>validateBio</code>.</td>
+  </tr>
+<tr>
+    <td><b><code>matchmaking_service.dart</code></b></td><td><b>24.8</b></td>
+    <td><span class="badge">MOYONI WA APP</span> Logic kuu:
+    <ul>
+      <li><code>fetchDiscoverableUsers({limit})</code> &mdash; watu wa Discover (hawaoni walio swiped)</li>
+      <li><code>recordSwipe(targetUid, isLike)</code> &mdash; like/pass; huunda match ikiwa wote wamependa</li>
+      <li><code>_createMatch(otherUid)</code> &mdash; kutengeneza chat room moja kwa moja</li>
+      <li><code>getChatAccessInfo(otherUid)</code> &mdash; kama gumzo limefunguliwa (chat lock)</li>
+      <li><code>payAndUnlockChat(otherUid)</code> &mdash; kulipa coins kufungua gumzo</li>
+      <li><code>streamMyChatRooms()</code> &mdash; Stream ya gumzo zangu</li>
+      <li><code>streamUsersWhoLikedMe()</code> &mdash; Stream ya waliokupenda</li>
+      <li><code>streamMissedCalls()</code> &mdash; Stream ya simu zilizopotea</li>
+      <li><code>fetchUserStats(uid)</code>, <code>rateUser(toUid, stars)</code></li>
+      <li><code>searchUsersByName(query)</code>, <code>chatIdFor(otherUid)</code></li>
+      <li><code>friendlyDiscoverError()</code>, <code>friendlyRatingError()</code></li>
+    </ul></td>
+  </tr>
+  <tr>
+    <td><b><code>notification_service.dart</code></b></td><td><b>16.0</b></td>
+    <td>Arifa za mfumo za simu:
+    <ul>
+      <li><code>initialize()</code> &mdash; kusajili plugin + kuunda channel ya Android</li>
+      <li><code>startListening()</code> / <code>stopListening()</code> &mdash; Realtime kwenye jedwali la <code>notifications</code></li>
+      <li><code>clearMessageNotificationsFor(peerUid)</code> &mdash; kufuta arifa za gumzo unapolifungua</li>
+      <li><code>_handleNotificationTap(payload)</code> &mdash; deep link ukiigusa arifa</li>
+      <li><code>_processPendingLaunchPayload()</code> &mdash; arifa iliyofungua app kutoka imefungwa</li>
+      <li><code>_fetchUserPreference(uid)</code> &mdash; heshimu mapendeleo ya mtumiaji</li>
+    </ul></td>
+  </tr>
+<tr>
+    <td><b><code>call_service.dart</code></b></td><td><b>6.4</b></td>
+    <td>Signaling ya WebRTC kupitia Supabase Realtime Broadcast:
+    <ul>
+      <li><code>static ensureSubscribed()</code> &mdash; <b>husubiri hali ya SUBSCRIBED</b> kabla ya kutuma ring (fix ya rings zilizopotea)</li>
+      <li><code>sendRing({...})</code> &mdash; kutuma mwaliko wa simu</li>
+      <li><code>startListening()</code> / <code>stopListening()</code> &mdash; kupokea ring</li>
+      <li><code>logMissedCall(...)</code> &mdash; kurekodi simu iliyopotea</li>
+    </ul></td>
+  </tr>
+  <tr>
+    <td><code>presence_service.dart</code></td><td>3.1</td>
+    <td>Hali mtandaoni: <code>static start()</code>, <code>static stop()</code>,
+    <code>static isOnline(data)</code>, <code>static lastSeenLabel(lastSeen)</code>
+    &mdash; inatoa "mtandaoni sasa" au "alikuwa mtandaoni dakika 5 zilizopita".</td>
+  </tr>
+  <tr>
+    <td><code>presence_tracker.dart</code></td><td>4.2</td>
+    <td>Widget inayofuatilia presence: <code>initState()</code> inatumia
+    <b>post-frame callback + retry loop</b> kuhakikisha listeners zinaanzishwa
+    baada ya UI kukamilika (fix ya "messages haziji kama notification").</td>
+  </tr>
+  <tr>
+    <td><code>storage_service.dart</code></td><td>1.4</td>
+    <td>Supabase Storage: <code>uploadProfileImage(uid, file)</code> &rarr; bucket
+    <code>avatars</code>; <code>uploadChatMedia(chatId, file, ext)</code> &rarr;
+    <code>chat_media</code>. Hurudisha URL ya umma.</td>
+  </tr>
+  <tr>
+    <td><code>user_prefs.dart</code></td><td>4.1</td>
+    <td>Mapendeleo kwenye database: <code>load(uid)</code>,
+    <code>set(column, bool)</code>, <code>clear()</code>.</td>
+  </tr>
+  <tr>
+    <td><code>vip_service.dart</code></td><td>2.0</td>
+    <td>VIP/badges: <code>isEligible(tier)</code>,
+    <code>purchaseBadge(tier)</code>, <code>getCurrentTier()</code>.</td>
+  </tr>
+</table>
+
+<h3>4.4 Widgets za Core</h3>
+<table>
+  <tr><th style="width:30%">Faili</th><th>Maelezo</th></tr>
+  <tr>
+    <td><code>widgets/heart_loader.dart</code></td>
+    <td>Loader ya moyo inayopiga (pulsing animation) &mdash; inaonyeshwa wakati data
+    inapakiwa, badala ya spinner ya kawaida. Inaendana na mandhari ya dating app.</td>
+  </tr>
+  <tr>
+    <td><code>widgets/supabase_setup_screen.dart</code></td>
+    <td>Skrini ya mwongozo inayoonyeshwa kama Supabase haijasanidiwa. Inaeleza
+    hatua za kuweka <code>--dart-define</code> au kuhariri <code>app_config.dart</code>.</td>
+  </tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2>5. Features (Vipengele)</h2>
+
+<p>Kila kipengele kinaishi kwenye <code>lib/features/&lt;jina&gt;/</code> na
+kimegawanywa kwa <code>data/</code> (models), <code>domain/</code> (models za domain)
+na <code>presentation/</code> (UI).</p>
+
+<h3>5.1 Auth &mdash; <code>features/auth/presentation/</code></h3>
+<p>Inashughulikia kujisajili, kuingia, na kurejesha nywila. Inatumia
+<code>Supabase Auth</code> (email/phone + OTP).</p>
+<table>
+  <tr><th style="width:34%">Skrini</th><th style="width:8%">KB</th><th>Maelezo</th></tr>
+  <tr><td><code>signup_screen.dart</code></td><td>16.4</td>
+      <td>Kujisajili: email au namba ya simu, kuchagua nchi (+255 Tanzania),
+      kutuma OTP. Inathibitisha kwa <code>ValidationService</code>.</td></tr>
+  <tr><td><code>login_screen.dart</code></td><td>9.6</td>
+      <td>Kuingia kwa email/phone + nywila. Ina "<i>Nimesahau nywila</i>" inayoelekeza
+      kwenye reset flow.</td></tr>
+  <tr><td><code>create_password_screen.dart</code></td><td>9.7</td>
+      <td>Kuweka nywila baada ya OTP kuthibitishwa (akaunti mpya). Ina kipimo cha
+      nguvu ya nywila.</td></tr>
+  <tr><td><code>reset_password_screen.dart</code></td><td>13.0</td>
+      <td>Kurejesha nywila: kutuma OTP/email, kuthibitisha <b>recovery code</b>,
+      kisha kuendelea.</td></tr>
+  <tr><td><code>new_password_screen.dart</code></td><td>6.2</td>
+      <td>Kuweka nywila mpya baada ya uthibitisho wa kurejesha.</td></tr>
+  <tr><td><code>setup_account_screen.dart</code></td><td>37.2</td>
+      <td><span class="badge alt">USANIDI MKUU</span> Wasifu kamili baada ya kujisajili:
+      jina, tarehe ya kuzaliwa (umri 18+), jinsia, unayependa, bio, picha.
+      Ina <b>viruhusa</b>: kamera, maikrofoni, ghala la picha, na <b>GPS</b>
+      (inachukua coordinates za mtumiaji kwa umbali).</td></tr>
+  <tr><td><code>profile_setup_screen.dart</code></td><td>30.0</td>
+      <td>Usanidi wa wasifu (toleo la awali linalotumika katika sehemu ya mabadiliko
+      ya baadaye).</td></tr>
+</table>
+
+<div class="info">
+  <b>Mtiririko wa Auth:</b> <code>AuthGate</code> (core) ndio mlango &mdash;
+  inaamua kila mtumiaji anapofungua app aende wapi: Welcome &rarr; Setup &rarr;
+  Dashboard.
+</div>
+<h3>5.2 Auth Onboarding &mdash; <code>features/auth_onboarding/presentation/screens/</code></h3>
+<p>Hatua za kuanzisha akaunti kwa mtumiaji mpya (kila hatua ni skrini moja iliyolenga
+jambo moja, kwa urahisi wa kutumia):</p>
+<table>
+  <tr><th style="width:34%">Skrini</th><th style="width:8%">KB</th><th>Maelezo</th></tr>
+  <tr><td><code>welcome_screen.dart</code></td><td>19.8</td>
+      <td>Skrini ya kukaribisha yenye jina <b>Pacific</b>, maelezo mafupi ya app na
+      vitufe vya "Anza" / "Ingia". Pia hubadilisha lugha (EN/SW).</td></tr>
+  <tr><td><code>name_screen.dart</code></td><td>4.3</td>
+      <td>Kuingiza jina la kwanza &amp; la mwisho.</td></tr>
+  <tr><td><code>birthday_screen.dart</code></td><td>5.7</td>
+      <td>Kuchagua tarehe ya kuzaliwa; inathibitisha mtumiaji ana <b>miaka 18+</b>
+      kabla ya kuendelea.</td></tr>
+  <tr><td><code>gender_screen.dart</code></td><td>4.6</td>
+      <td>Kuchagua jinsia yako na jinsia unayotaka kuonana nayo (matching preference).</td></tr>
+  <tr><td><code>photo_upload_screen.dart</code></td><td>7.1</td>
+      <td>Kupakia picha ya wasifu kwenye bucket ya <code>avatars</code>.</td></tr>
+</table>
+
+<h3>5.3 Chat, Simu na Zawadi &mdash; <code>features/chat/</code></h3>
+<p>Hiki ni kipengele kikubwa zaidi cha app (faili 5 za UI, moja ikiwa 95.7 KB).</p>
+<table>
+  <tr><th style="width:34%">Faili</th><th style="width:8%">KB</th><th>Maelezo</th></tr>
+  <tr><td><code>presentation/chat_list_screen.dart</code></td><td>36.7</td>
+      <td>Orodha ya gumzo zangu zote. Inaonyesha picha, jina, ujumbe wa mwisho,
+      muda ("dakika 5 zilizopita"), na <b>alama ya kufuli</b> kama gumzo
+      halijafunguliwa. Pia inaonyesha <b>simu zilizopotea</b> (missed calls).</td></tr>
+  <tr><td><code>presentation/individual_chat_screen.dart</code></td><td>95.7</td>
+      <td><span class="badge">FAILI KUBWA ZAIDI</span> Gumzo kamili:
+        <ul>
+          <li>Ujumbe wa maandishi kwa Realtime</li>
+          <li><b>Voice notes</b> (kurekodi kwa <code>record</code>, kucheza kwa <code>audioplayers</code>)</li>
+          <li>Kutuma picha (kupakia kwenye <code>chat_media</code>)</li>
+          <li><b>Typing indicators</b> (kuandika...)</li>
+          <li><b>Chat lock (coin gate)</b> &mdash; gumzo limefungwa hadi ulipe coins</li>
+          <li>Alama za kusoma (read receipts) na smooth scroll</li>
+          <li>Vitufe vya kuanzisha simu ya sauti/video</li>
+          <li>Kutuma zawadi (gifts)</li>
+        </ul></td></tr>
+  <tr><td><code>presentation/call_screen.dart</code></td><td>38.6</td>
+      <td>Skrini ya simu ya WebRTC:
+        <ul>
+          <li>Offer / Answer / ICE candidates kwa Realtime Broadcast</li>
+          <li>Video ya mwenzio (full screen) + video yako (ndogo, inayoweza kuhamishwa)</li>
+          <li>Kitufe cha kuzima/kuwasha maikrofoni na kamera</li>
+          <li>Kubadilisha kati ya sauti na video</li>
+          <li><b>Call timer</b> na UI inayopiga (pulsing) wakati inaita</li>
+          <li>Kukata simu, na kurekodi <b>missed call</b> kama haikupokewa</li>
+        </ul></td></tr>
+  <tr><td><code>presentation/likes_screen.dart</code></td><td>7.9</td>
+      <td>Orodha ya watu waliokupenda (likes). Inatumia
+      <code>streamUsersWhoLikedMe()</code> na RLS policy ya <code>likes_visibility</code>.</td></tr>
+  <tr><td><code>presentation/widgets/gift_modal_bottom_sheet.dart</code></td><td>22.9</td>
+      <td>Modal ya kutuma zawadi: inaonyesha zawadi zilizopo kwa gridi, bei kwa coins,
+      na kuthibitisha kabla ya kutuma. Inatumia RPC <code>send_gift()</code>.</td></tr>
+  <tr><td><code>domain/models/chat_model.dart</code></td><td>0.5</td>
+      <td>Model ya chat room (id, washiriki, ujumbe wa mwisho, muda).</td></tr>
+  <tr><td><code>domain/models/gift_model.dart</code></td><td>3.4</td>
+      <td>Model ya zawadi: jina, aikoni, bei kwa coins, na ujumbe.</td></tr>
+</table>
+
+<div class="box">
+  <b>Chat Lock (coin gate):</b> unapolinganishwa na mtu, gumzo linafunguliwa kwa
+  malipo ya coins mara moja. <code>getChatAccessInfo()</code> hukagua hali;
+  <code>payAndUnlockChat()</code> hulipa. Hii ni njia kuu ya mapato ya app.
+</div>
+<!-- 5.4 -->
+

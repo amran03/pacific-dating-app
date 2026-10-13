@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/auth_errors.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/name_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 /// Hubadilisha namba ya simu kuwa "email ya kubuni" (synthetic email).
 /// Inashughulikia formats zote za kawaida za TZ: 0712345678, 712345678,
@@ -74,8 +76,8 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
           );
         } else {
           _showMessage(
-            "Account created but it needs verification. Turn off 'Confirm "
-            "email' kwenye: Supabase > Authentication > Sign In / Up.",
+            "Account created, but it needs verification. Turn off 'Confirm "
+            "email' in: Supabase > Authentication > Sign In / Up.",
             Colors.orange,
           );
         }
@@ -85,7 +87,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
 
       final String uid = user.id;
 
-      // 2. Hifadhi taarifa za awali kwenye Supabase 'users' table
+      // 2. Save the initial profile to the Supabase 'users' table
       await Supabase.instance.client.from('users').upsert({
         'uid': uid,
         'phone_number': widget.phoneNumber,
@@ -116,9 +118,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
 
   void _showMessage(String message, Color color) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
-    );
+    showAppNotification(context, message, color: color);
   }
 
   @override
@@ -162,12 +162,12 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  "Weka Password Yako 🔒",
+                  "Set Your Password 🔒",
                   style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  "Hatua ya mwisho! Weka password ambayo utaitumia pamoja na ${widget.phoneNumber} kila utakapoingia (login).",
+                  "Last step! Create the password you'll use with ${widget.phoneNumber} every time you log in.",
                   style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
                 ),
                 const SizedBox(height: 32),
@@ -186,7 +186,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                     hintText: "At least 6 characters",
                     filled: true,
                     fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide.none),
                   ),
                   validator: (value) {
                     if (value == null || value.length < 6) {
@@ -211,7 +211,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                     hintText: "Repeat password",
                     filled: true,
                     fillColor: Colors.white,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(borderRadius: AppRadius.md, borderSide: BorderSide.none),
                   ),
                   validator: (value) {
                     if (value != _passwordController.text) {
@@ -230,7 +230,7 @@ class _CreatePasswordScreenState extends State<CreatePasswordScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.xl),
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)

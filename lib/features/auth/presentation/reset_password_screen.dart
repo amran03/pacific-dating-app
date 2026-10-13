@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/auth_errors.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
@@ -19,12 +21,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     final String email = _emailController.text.trim();
 
     if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please enter your email first."),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      showAppNotification(context, "Please enter your email first.", color: Colors.redAccent);
       return;
     }
 
@@ -39,19 +36,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     } on AuthException catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyAuthError(e)),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
+        showAppNotification(context, friendlyAuthError(e), color: Colors.redAccent);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.redAccent),
-        );
+        showAppNotification(context, "Error: $e", color: Colors.redAccent);
       }
     }
   }
@@ -162,7 +152,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   );
                 },
                 child: const Text(
-                  "Weka email yako iliyosajiliwa ili tukutumie maelekezo ya kubadili password.",
+                  "Enter your registered email address and we'll send you instructions to reset your password.",
                   style: TextStyle(
                     fontSize: 15,
                     height: 1.5,
@@ -183,7 +173,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: AppRadius.md,
                   border: Border.all(
                     color: Colors.grey.shade200,
                     width: 1.5,
@@ -204,7 +194,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       Icons.email_outlined,
                       color: AppColors.primaryDeep,
                     ),
-                    hintText: "Ingiza email yako",
+                    hintText: "Enter your email",
                     hintStyle: TextStyle(color: Colors.grey.shade400),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(18),
@@ -217,7 +207,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                 height: 58,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(30),
+                    borderRadius: AppRadius.xl,
                     gradient: const LinearGradient(
                       colors: AppColors.primaryGradient,
                     ),
@@ -237,7 +227,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       shadowColor: Colors.transparent,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
+                        borderRadius: AppRadius.xl,
                       ),
                     ),
                     child: _isLoading
@@ -311,7 +301,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
             height: 4,
             decoration: BoxDecoration(
               color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: AppRadius.sm,
             ),
           ),
           const SizedBox(height: 20),
@@ -339,7 +329,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
             height: 56,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(30),
+                borderRadius: AppRadius.xl,
                 gradient: const LinearGradient(
                   colors: AppColors.primaryGradient,
                 ),
@@ -358,7 +348,7 @@ class _RecoveryCodePopupContentState extends State<_RecoveryCodePopupContent> {
                   shadowColor: Colors.transparent,
                   elevation: 0,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                    borderRadius: AppRadius.xl,
                   ),
                 ),
                 child: const Text(

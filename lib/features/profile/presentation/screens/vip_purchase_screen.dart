@@ -5,6 +5,8 @@ import 'package:pacific_dating_app/core/services/vip_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 /// Screen inayomruhusu mtumiaji kuona coins alizonazo, tier yake ya sasa,
 /// na kununua VIP Badge (Bronze / Gold / Diamond) to kutumia VIPService
@@ -43,14 +45,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
     try {
       await _vipService.purchaseBadge(tier);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Congratulations! You bought the ${VIPService.tiers[tier]!['name']} 🎉"),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      showAppNotification(context, "Congratulations! You bought the ${VIPService.tiers[tier]!['name']} 🎉", color: Colors.green);
     } catch (e) {
       if (!mounted) return;
       _errorService.showError(context, _errorService.mapExceptionToMessage(e));
@@ -87,14 +82,14 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: AppRadius.md,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.monetization_on_rounded, color: AppColors.coinGold),
+                        const Icon(Icons.monetization_on_rounded, color: AppColors.coinGoldDark),
                         const SizedBox(width: 8),
                         Text("Your balance: $coins Coins",
                             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
@@ -124,7 +119,7 @@ class _VIPPurchaseScreenState extends State<VIPPurchaseScreen> {
                       margin: const EdgeInsets.only(bottom: 14),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: AppRadius.md,
                         border: Border.all(
                           color: isCurrent ? _tierColor(tierKey) : Colors.grey.shade300,
                           width: isCurrent ? 2 : 1,

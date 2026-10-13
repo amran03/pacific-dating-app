@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // Keep import so AppLanguage stays initialized; UI is English-only now.
 import 'core/localization/app_language.dart';
@@ -8,12 +7,14 @@ import 'core/services/auth_gate.dart';
 import 'core/services/call_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/presence_tracker.dart';
+import 'core/services/push_service.dart';
 import 'core/services/supabase_service.dart';
+import 'core/services/zego_call_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Lugha na THEME iliyohifadhiwa — zinaweka kabla app haijafunguka.
+  // Stored language/theme — loaded before the app opens.
   await AppLanguage.instance.load();
   await AppTheme.instance.load();
 
@@ -24,8 +25,19 @@ Future<void> main() async {
     debugPrint('Supabase initialization failed: $e');
   }
 
+  // Push (FCM) — registers the background handler BEFORE runApp so
+  // notifications arrive even when the app is backgrounded or killed.
+  // Safe no-op when Firebase is not configured yet.
+  await PushService.init();
+
   // Real (system) notifications
   await NotificationService.instance.initialize();
+
+  // ZEGO call invitation: funga global navigatorKey (ile ile ya
+  // MaterialApp hapo chini) kabla ya app kuanza — incoming-call UI
+  // inapushwa kupitia hiyo key. init() wenyewe inaitwa baada ya login
+  // (presence_tracker).
+  ZegoCallService.instance.registerNavigatorKey();
 
   runApp(const MyApp());
 }
@@ -50,20 +62,15 @@ class MyApp extends StatelessWidget {
             return MaterialApp(
               title: 'Pacific Dating App',
               debugShowCheckedModeBanner: false,
+              // Global navigatorKey — pia inatumika na ZEGO
+              // (ZegoUIKitPrebuiltCallInvitationService) kwa
+              // incoming-call UI; ni key moja tu (CallService).
               navigatorKey: CallService.instance.navigatorKey,
 
               // FONT: Poppins — modern, readable, used by ALL screens.
-              // Used by ALL app screens by default.
-              theme: ThemeData(
-                useMaterial3: true,
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFFFF4B72),
-                  brightness: AppTheme.instance.isDark
-                      ? Brightness.dark
-                      : Brightness.light,
-                ),
-                textTheme: GoogleFonts.poppinsTextTheme(),
-              ),
+              // The full rounded design system (cards, dialogs, sheets,
+              // inputs, buttons, chips) is defined once in AppTheme.theme().
+              theme: AppTheme.instance.theme(),
 
               // Builder wrapper — navigation stack is not rebuilt when the
               // theme changes. This avoids pushing back to welcome screen.

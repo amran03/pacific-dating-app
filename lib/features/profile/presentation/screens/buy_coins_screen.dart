@@ -3,12 +3,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/profile/presentation/screens/payment_webview_screen.dart';
 import 'package:pacific_dating_app/services/pesapal_service.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
-/// Kifurushi kimoja cha Coins - 1 Coin = 25 TSH (kiwango cha ubadilishaji
-/// kilichoombwa). Bei ni coins * 25.
+/// A single Coin package — 1 Coin = 25 TSH (exchange rate requested).
+/// Price is coins * 25.
 class _CoinPackage {
   final int coins;
-  final String? badge; // mfano "Maarufu" au "Zaidi ya thamani"
+  final String? badge; // e.g. "Popular" or "Best value"
 
   const _CoinPackage(this.coins, {this.badge});
 
@@ -17,30 +19,30 @@ class _CoinPackage {
 
 const List<_CoinPackage> _kCoinPackages = [
   _CoinPackage(50),
-  _CoinPackage(120, badge: "Maarufu 🔥"),
+  _CoinPackage(120, badge: "Popular 🔥"),
   _CoinPackage(300),
-  _CoinPackage(650, badge: "Thamani Zaidi 💎"),
+  _CoinPackage(650, badge: "Best Value 💎"),
   _CoinPackage(1400),
   _CoinPackage(3000),
 ];
 
-/// Skrini ya kununua Coins. 1 Coin = 25 TSH.
+/// Screen for buying Coins. 1 Coin = 25 TSH.
 ///
-/// MTIRIRIKO WA MALIPO (PesaPal API 3.0):
-///   1. Mtumiaji anagusa kifurushi -> [PesapalService.createOrder] inaita
-///      Edge Function `create-pesapal-order` (server inahesabu kiasi,
-///      inaunda order kwa PesaPal, inahifadhi rekodi ya PENDING).
-///   2. [PaymentWebViewScreen] inafungua redirect_url ya PesaPal kwenye WebView.
-///   3. Mtumiaji akimaliza kulipa, PesaPal inaipiga `pesapal-ipn` (webhook)
-///      na inamrudisha kwenye `pesapal-return` (callback_url).
-///   4. Edge Function inathibitisha malipo kwa GetTransactionStatus, inaweka
-///      transactions = COMPLETED na inaongeza `coins` kwenye profile ya
-///      mtumiaji (service_role - Flutter haiwezi kuongeza coins yenyewe).
-///   5. Skrini hii inaonyesha matokeo; StreamBuilder ya salio inajisasisha
-///      yenyewe (Realtime).
+/// PAYMENT FLOW (PesaPal API 3.0):
+///   1. The user taps a package -> [PesapalService.createOrder] calls the
+///      `create-pesapal-order` Edge Function (the server calculates the
+///      amount, creates the order with PesaPal, and stores a PENDING record).
+///   2. [PaymentWebViewScreen] opens PesaPal's redirect_url in a WebView.
+///   3. When the user finishes paying, PesaPal hits `pesapal-ipn` (webhook)
+///      and redirects to `pesapal-return` (callback_url).
+///   4. The Edge Function verifies the payment with GetTransactionStatus,
+///      sets transactions = COMPLETED and credits `coins` to the user's
+///      profile (service_role — Flutter cannot add coins by itself).
+///   5. This screen shows the result; the balance StreamBuilder updates
+///      itself (Realtime).
 ///
-/// consumer_key/consumer_secret HAZIPO kwenye code hii — ziko kwenye
-/// Supabase Edge Function secrets pekee.
+/// consumer_key/consumer_secret are NOT in this code — they live only in
+/// Supabase Edge Function secrets.
 class BuyCoinsScreen extends StatefulWidget {
   const BuyCoinsScreen({super.key});
 
@@ -52,7 +54,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
   int? _processingIndex;
 
   String _formatTsh(int amount) {
-    // Weka comma kila tarakimu 3 (mfano 12000 -> 12,000)
+    // Insert a comma every 3 digits (e.g. 12000 -> 12,000)
     final String raw = amount.toString();
     final buffer = StringBuffer();
     for (int i = 0; i < raw.length; i++) {
@@ -75,7 +77,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
     setState(() => _processingIndex = index);
 
     try {
-      // Namba ya simu inahitajika kwa PesaPal (M-Pesa/Tigo/Airtel/Card).
+      // A phone number is required by PesaPal (M-Pesa/Tigo/Airtel/Card).
       final String phone = await _resolvePhoneNumber(user.id);
       if (phone.isEmpty) {
         if (mounted) setState(() => _processingIndex = null);
@@ -92,7 +94,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
 
       if (!mounted) return;
 
-      // 2) Fungua ukurasa wa malipo ya PesaPal kwenye WebView.
+      // 2) Open the PesaPal payment page in a WebView.
       final bool? paid = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
           builder: (_) => PaymentWebViewScreen(
@@ -104,7 +106,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
 
       if (!mounted) return;
 
-      // 3) Matokeo (coins zinaongezwa na Edge Function, sio app).
+      // 3) Result (coins are credited by the Edge Function, not the app).
       if (paid == true) {
         _showSnack(
           "Payment successful! ${order.coins} coins added 🎉",
@@ -130,7 +132,8 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
     }
   }
 
-  /// Rudisha namba ya simu ya mtumiaji; kama haipo kwenye profile, mwombe.
+  /// Returns the user's phone number; if it is missing from the profile,
+  /// ask for it.
   Future<String> _resolvePhoneNumber(String uid) async {
     try {
       final row = await Supabase.instance.client
@@ -141,13 +144,13 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
       final String existing = (row?['phone_number'] ?? '').toString().trim();
       if (existing.isNotEmpty) return existing;
     } catch (_) {
-      // Kama kusoma profile kumeshindwa, mwombe mtumiaji namba.
+      // If reading the profile failed, ask the user for the number.
     }
     if (!mounted) return '';
     return await _promptForPhone() ?? '';
   }
 
-  /// Dialog: namba ya simu ya kulipia (PesaPal inaihitaji).
+  /// Dialog: the phone number to pay from (required by PesaPal).
   Future<String?> _promptForPhone() {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -156,7 +159,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppRadius.card,
         ),
         title: const Text(
           "Phone number",
@@ -215,12 +218,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
   }
 
   void _showSnack(String message, {Color? color}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-      ),
-    );
+    showAppNotification(context, message, color: color);
   }
 
   @override
@@ -245,7 +243,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
       ),
       body: Column(
         children: [
-          // Salio la sasa
+          // Current balance
           Container(
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 24),
@@ -255,7 +253,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: AppRadius.xl,
               boxShadow: [
                 BoxShadow(
                   color: AppColors.coinGold.withValues(alpha: 0.4),
@@ -274,15 +272,24 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      "Salio Lako Sasa",
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+                      "Your Balance",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                     Row(
                       children: [
-                        const Text("🪙 ", style: TextStyle(fontSize: 20)),
+                        const Text("🪙 ", style: TextStyle(fontSize: 22)),
                         Text(
                           "$coins",
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 24),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 26,
+                          ),
                         ),
                       ],
                     ),
@@ -299,8 +306,8 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                 Icon(Icons.info_outline_rounded, size: 14, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
                 Text(
-                  "Kiwango: Coin 1 = TSh ${PesapalService.kCoinRateTzs}",
-                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
+                  "1 Coin = TSh ${PesapalService.kCoinRateTzs} · Paid securely via PesaPal",
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -328,7 +335,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: AppRadius.card,
                       border: Border.all(
                         color: package.badge != null
                             ? AppColors.primary.withValues(alpha: 0.4)
@@ -351,7 +358,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: AppRadius.sm,
                             ),
                             child: Text(
                               package.badge!,
@@ -380,7 +387,7 @@ class _BuyCoinsScreenState extends State<BuyCoinsScreen> {
                               backgroundColor: AppColors.primary,
                               elevation: 0,
                               padding: EdgeInsets.zero,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              shape: RoundedRectangleBorder(borderRadius: AppRadius.sm),
                             ),
                             child: isProcessing
                                 ? const SizedBox(

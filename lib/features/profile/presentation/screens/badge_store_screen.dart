@@ -3,6 +3,7 @@ import 'package:pacific_dating_app/core/services/vip_service.dart';
 import 'package:pacific_dating_app/core/services/core_error_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class BadgeStoreScreen extends StatefulWidget {
   const BadgeStoreScreen({super.key});
@@ -113,8 +114,8 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
       CoreErrorService().showError(
         context,
-        "Unahitaji kuwa na angalau $minBalance coins ili uweze "
-            "kununua badge hii.",
+        "You need at least $minBalance coins to be able to "
+            "buy this badge.",
       );
       return;
     }
@@ -125,7 +126,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
       CoreErrorService().showError(
         context,
-        "Tayari unamiliki $tier badge.",
+        "You already own the $tier badge.",
       );
       return;
     }
@@ -148,7 +149,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
       CoreErrorService().showError(
         context,
-        "Hongera! Umepata $tier badge!",
+        "Congratulations! You got the $tier badge!",
         color: Colors.green,
       );
     } catch (e) {
@@ -160,12 +161,12 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
 
       if (error.contains('MINIMUM_BALANCE_NOT_MET')) {
         message =
-        "Unahitaji kuwa na angalau $minBalance coins ili uweze "
-            "kununua badge hii.";
+        "You need at least $minBalance coins to be able to "
+            "buy this badge.";
       } else if (error.contains('INSUFFICIENT_COINS')) {
-        message = "Huna coins za kutosha kulipia badge hii.";
+        message = "You don't have enough coins to buy this badge.";
       } else if (error.contains('BADGE_ALREADY_OWNED')) {
-        message = "Tayari unamiliki badge hii.";
+        message = "You already own this badge.";
       }
 
       CoreErrorService().showError(
@@ -219,7 +220,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
             ),
             decoration: BoxDecoration(
               color: Colors.amber.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: AppRadius.card,
               border: Border.all(
                 color: Colors.amber,
                 width: 1,
@@ -256,7 +257,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              "Chagua Hadhi Yako",
+              "Choose Your Badge",
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 22,
@@ -267,8 +268,8 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
             const SizedBox(height: 8),
 
             Text(
-              "Ongeza mvuto wa profile yako na uweze "
-                  "kutambulika kama mtu mwenye uwezo.",
+              "Boost your profile's appeal and get "
+                  "recognized as someone exceptional.",
               style: TextStyle(
                 color: Colors.grey.shade400,
                 fontSize: 14,
@@ -317,7 +318,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: AppRadius.card,
                 border: Border.all(
                   color: Colors.white.withValues(alpha: 0.1),
                 ),
@@ -345,9 +346,8 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
                   const SizedBox(height: 8),
 
                   Text(
-                    "Ili uweze kununua badge, lazima ufikishe "
-                        "kiwango cha chini cha coins kwenye akaunti "
-                        "yako kwanza. Hii inathibitisha hadhi yako ya VIP.",
+                    "To buy a badge, your account must first reach the "
+                        "minimum coin balance. This verifies your VIP status.",
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.grey.shade400,
@@ -381,7 +381,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
             ? color.withValues(alpha: 0.15)
             : const Color(0xFF1A1A1A),
 
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: AppRadius.xl,
 
         border: Border.all(
           color: isOwned
@@ -498,7 +498,7 @@ class _BadgeStoreScreenState extends State<BadgeStoreScreen> {
                 Colors.grey.shade500,
 
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.sm,
                 ),
 
                 elevation: 0,

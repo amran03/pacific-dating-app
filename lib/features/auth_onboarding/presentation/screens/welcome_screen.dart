@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/login_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -63,7 +65,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                         height: 4,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade300,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: AppRadius.sm,
                         ),
                       ),
                     ),
@@ -94,7 +96,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: AppRadius.md,
                           ),
                           child: const Row(
                             children: [
@@ -120,7 +122,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             decoration: BoxDecoration(
                               color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: AppRadius.md,
                             ),
                             child: TextField(
                               controller: phoneController,
@@ -149,20 +151,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           disabledBackgroundColor:
                               AppColors.primary.withValues(alpha: 0.6),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
+                            borderRadius: AppRadius.xl,
                           ),
                         ),
                         onPressed: () {
                           String digits = phoneController.text.trim();
 
                           if (digits.length < 9) {
-                            ScaffoldMessenger.of(sheetContext)
-                                .showSnackBar(
-                              SnackBar(
-                                content: Text('Enter a valid 9-digit number.',),
-                                backgroundColor: Colors.redAccent,
-                              ),
-                            );
+                            showAppNotification(sheetContext, 'Enter a valid 9-digit number.', color: Colors.redAccent);
                             return;
                           }
 
@@ -276,7 +272,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                             width: 130,
                             height: 130,
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(34),
+                              borderRadius: AppRadius.xl,
                               boxShadow: [
                                 BoxShadow(
                                   color: AppColors.primaryDark
@@ -287,7 +283,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                               ],
                             ),
                             child: ClipRRect(
-                              borderRadius: BorderRadius.circular(34),
+                              borderRadius: AppRadius.xl,
                               child: Image.asset(
                                 'assets/images/app_icon.png',
                                 fit: BoxFit.cover,
@@ -374,7 +370,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                   height: 56,
                                   child: DecoratedBox(
                                     decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(30),
+                                      borderRadius: AppRadius.xl,
                                       gradient: const LinearGradient(
                                         colors: AppColors.primaryGradient,
                                       ),
@@ -394,7 +390,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                         elevation: 0,
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(30),
+                                              AppRadius.xl,
                                         ),
                                       ),
                                       onPressed: () =>
@@ -421,7 +417,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                         width: 1.5,
                                       ),
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(30),
+                                        borderRadius: AppRadius.xl,
                                       ),
                                     ),
                                     onPressed: () {

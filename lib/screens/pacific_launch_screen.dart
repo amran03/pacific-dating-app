@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 // Kutumia package import sahihi to ajili ya MainDashboardScreen
 import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class PacificLaunchScreen extends StatefulWidget {
   const PacificLaunchScreen({super.key});
@@ -94,7 +95,7 @@ class _PacificLaunchScreenState extends State<PacificLaunchScreen>
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      "Pata mwandani wako wa maisha to urahisi.\nStart your love journey today.",
+                      "Find your soulmate with ease.\nStart your love journey today.",
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
@@ -119,7 +120,7 @@ class _PacificLaunchScreenState extends State<PacificLaunchScreen>
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.pink.shade800,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
+                            borderRadius: AppRadius.xl,
                           ),
                           elevation: 5,
                         ),

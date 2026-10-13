@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_color.dart';
 import 'photo_upload_screen.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class GenderScreen extends StatefulWidget {
   final String firstName;
@@ -33,7 +34,7 @@ class _GenderScreenState extends State<GenderScreen> {
         padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
         decoration: BoxDecoration(
           color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : AppColors.inputFill,
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: AppRadius.xl,
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
             width: 2,
@@ -124,7 +125,7 @@ class _GenderScreenState extends State<GenderScreen> {
                     disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: AppRadius.xl,
                     ),
                   ),
                   child: const Text(

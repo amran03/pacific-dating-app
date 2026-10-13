@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/constants/app_color.dart';
 import '../../../../core/widgets/heart_loader.dart';
 import '../../../dashboard/presentation/screens/main_dashboard_screen.dart';
+import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
+import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
 class PhotoUploadScreen extends StatefulWidget {
   final String firstName;
@@ -70,17 +72,12 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
         MaterialPageRoute(
           builder: (context) => const MainDashboardScreen(),
         ),
-        (route) => false, // Inafuta skrini za nyuma ili asirudi kwenye Onboarding
+        (route) => false, // Removes the previous screens so they can't go back to Onboarding
       );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: ${e.toString()}'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      showAppNotification(context, 'Error: ${e.toString()}', color: Colors.redAccent);
     }
   }
 
@@ -90,7 +87,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.inputFill,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppRadius.md,
         border: Border.all(
           color: hasPhoto ? AppColors.primary : Colors.grey.shade300,
           width: 1.5,
@@ -195,7 +192,7 @@ class _PhotoUploadScreenState extends State<PhotoUploadScreen> {
                     backgroundColor: AppColors.primary,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: AppRadius.xl,
                     ),
                   ),
                   child: _isSaving
