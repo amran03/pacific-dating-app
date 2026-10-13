@@ -1283,6 +1283,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
                             Expanded(
                               child: Column(
+                                // mainAxisSize.min + centered keeps the
+                                // avatar + two-line text block from
+                                // overflowing the 65px AppBar ("BOTTOM
+                                // OVERFLOWED BY 30 PIXELS") when the
+                                // last-seen label is long.
+                                mainAxisSize:
+                                MainAxisSize.min,
+                                mainAxisAlignment:
+                                MainAxisAlignment.center,
                                 crossAxisAlignment:
                                 CrossAxisAlignment.start,
                                 children: [
@@ -1357,29 +1366,30 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                             width: 5,
                                           ),
 
-                                          Text(
-                                            online
-                                                ? (_lang.isSwahili
-                                                ? 'Online'
-                                                : 'Online')
-                                                : (lastSeen != null
-                                                ? PresenceService
-                                                .lastSeenLabel(
-                                              lastSeen,
-                                              swPrefix:
-                                              'zilizopita',
-                                            )
-                                                : 'offline'),
-                                            style: TextStyle(
-                                              color: online
-                                                  ? Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant
-                                                  : Theme.of(context)
-                                                      .colorScheme
-                                                      .onSurfaceVariant
-                                                      .withValues(alpha: 0.7),
-                                              fontSize: 11,
+                                          // Flexible + single line so a long last-seen label ellipsizes
+                                          // instead of wrapping (which overflowed the 65px AppBar:
+                                          // "BOTTOM OVERFLOWED BY 30 PIXELS").
+                                          Flexible(
+                                            child: Text(
+                                              online
+                                                  ? 'Online'
+                                                  : (lastSeen != null
+                                                  ? PresenceService
+                                                  .lastSeenLabel(
+                                                lastSeen,
+                                                swPrefix:
+                                                  'zilizopita',
+                                              )
+                                                  : 'Offline'),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: online
+                                                    ? Theme.of(context).colorScheme.onSurfaceVariant
+                                                    : Theme.of(context).colorScheme.onSurfaceVariant
+                                                        .withValues(alpha: 0.7),
+                                                fontSize: 11,
+                                              ),
                                             ),
                                           ),
                                         ],
