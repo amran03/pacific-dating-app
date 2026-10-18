@@ -58,8 +58,12 @@ async function fcmAccessToken(): Promise<string> {
       `&assertion=${jwt}`,
   });
   const json = await res.json();
-  if (!res.ok || !json.access_token) throw new Error("FCM token failed");
-  return json.access_token as string;
+  if (!res.ok || !json.access_token) {
+    throw new Error("FCM token failed: " + JSON.stringify(json));
+  }
+  // Lazima turudi tokeni hii — bila hapa accessToken = undefined na
+  // kila send itaishia 401 (Bearer undefined).
+  return json.access_token;
 }
 
 Deno.serve(async (req) => {
@@ -77,6 +81,7 @@ Deno.serve(async (req) => {
     if (!url || !serviceKey) throw new Error("Supabase env missing");
 
     const body = await req.json();
+    console.log("send-push called:", JSON.stringify(body));
     const toUid = (body.to_uid ?? "").toString();
     if (!toUid) throw new Error("to_uid required");
     const type = (body.type ?? "message").toString();
@@ -127,7 +132,7 @@ Deno.serve(async (req) => {
         },
       };
       if (type === "call") {
-        message.notification = { title, body };
+       message.notification = { title, body: msgBody };
       }
       const res = await fetch(
         `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -140,8 +145,14 @@ Deno.serve(async (req) => {
           body: JSON.stringify({ message }),
         },
       );
-      if (res.ok) sent++;
+      if (res.ok) {
+        sent++;
+      } else {
+        console.error("FCM send failed", res.status, await res.text());
+      }
     }
+    // Rudisha Response ya mafanikio — handler isiporudi chochote,
+    // Deno hutoa error hata kama send zote zimefanikiwa.
     return new Response(JSON.stringify({ ok: true, sent }), {
       headers: { "Content-Type": "application/json" },
     });

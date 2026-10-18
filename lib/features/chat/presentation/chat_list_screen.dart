@@ -3,9 +3,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/constants/app_color.dart';
+import '../../../core/services/chat_cache_service.dart';
 import '../../../core/services/matchmaking_service.dart';
+import 'package:pacific_dating_app/services/connectivity_service.dart';
+import '../../../core/services/unread_messages_service.dart';
 import '../../../core/services/core_error_service.dart';
 import '../../../core/widgets/heart_loader.dart';
+import '../../../core/widgets/no_internet_view.dart';
 import '../../chat/domain/models/chat_model.dart';
 import '../../profile/presentation/public_profile_screen.dart';
 import 'individual_chat_screen.dart';
@@ -23,54 +27,56 @@ class _ChatListScreenState extends State<ChatListScreen> {
   final MatchmakingService _matchmakingService = MatchmakingService();
 
   // ---- UNREAD COUNTS (per chat) ----
-  // Inasikiliza messages zote zisizosomwa (receiver = mimi, seen = false)
-  // realtime, kisha inahesabu kwa kila chat_id ili badge ioneshwe kwenye
-  // kila mazungumzo na jumla kwenye icon ya Chat.
-  StreamSubscription<List<Map<String, dynamic>>>? _unreadSub;
-  Map<String, int> _unreadByChatId = {};
+  // Hesabu zinatoka UnreadMessagesService (subscription MOJA ya app yote).
+  // Hapa tunasikiliza stream tayari ili badges za kila mazungumzo
+  // zijisasisha papo hapo count inapobadilika (k.m. mtumiaji akifungua
+  // ujumbe -> openChat() inafuta count moja kwa moja).
+  StreamSubscription<Map<String, int>>? _countsSub;
+
+  // ---- BACKGROUND REFRESH + OFFLINE CACHE ----
+  // Stream imewekwa HAPA (si kwenye build) — kila rebuild (badge update)
+  // zamani ilifungua subscription MPYA na kila kitu kikawa kina-refresh
+  // full-page. Sasa ni background: subscription moja, rebuild ndogo tu.
+  Stream<List<ChatModel>>? _chatsStream;
+
+  // Cache ya ndani (storage ya simu) — offline au stream imeshindwa:
+  // orodha ya mazungumzo bado inaonekana (bila loader/errors za ukurasa
+  // mzima). Inasasishwa background kila data halisi inapowasili.
+  List<ChatModel> _cachedChats = const [];
 
   @override
   void initState() {
     super.initState();
-    _listenUnreadCounts();
-  }
-
-  void _listenUnreadCounts() {
-    final myUid = Supabase.instance.client.auth.currentUser?.id;
-    if (myUid == null || myUid.isEmpty) return;
-
-    _unreadSub = Supabase.instance.client
-        .from('messages')
-        .stream(primaryKey: ['id'])
-        .eq('receiver_id', myUid)
-        .eq('seen', false)
-        .listen((rows) {
+    _chatsStream = _matchmakingService.streamMyChatRooms();
+    _loadCachedChats();
+    _countsSub = UnreadMessagesService.instance.countsStream.listen((_) {
       if (!mounted) return;
-      final Map<String, int> counts = {};
-      for (final row in rows) {
-        final chatId = row['chat_id']?.toString() ?? '';
-        if (chatId.isEmpty) continue;
-        counts[chatId] = (counts[chatId] ?? 0) + 1;
-      }
-      setState(() => _unreadByChatId = counts);
-    }, onError: (e) {
-      debugPrint('Unread stream error: $e');
+      // Hesabu zinasomwa moja kwa moja kutoka service kwenye [_unreadFor].
+      setState(() {});
     });
   }
 
-  /// Chat ID kati ya mimi na [otherUid] — lazima iendane na inayotengenezwa
-  /// IndividualChatScreen (uids zimepangwa kisha zimeunganwa na '_').
-  String _chatIdFor(String otherUid) {
-    final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
-    return ([myUid, otherUid]..sort()).join('_');
+  Future<void> _loadCachedChats() async {
+    final String uid = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final cached = await ChatCacheService.instance.loadChats(uid);
+    if (!mounted || cached.isEmpty) return;
+    setState(() => _cachedChats = cached);
+  }
+
+  /// "Jaribu tena" (kutoka NoInternetView) — sasisha mtandao + fungua upya
+  /// stream. UI haionyeshi loader wa ukurasa mzima — inasubiri background.
+  Future<void> _refreshChats() async {
+    unawaited(ConnectivityService.instance.refresh());
+    _chatsStream = _matchmakingService.streamMyChatRooms();
+    if (mounted) setState(() {});
   }
 
   int _unreadFor(ChatModel chat) =>
-      _unreadByChatId[_chatIdFor(chat.id)] ?? 0;
+      UnreadMessagesService.instance.unreadFor(chat.id);
 
   @override
   void dispose() {
-    _unreadSub?.cancel();
+    _countsSub?.cancel();
     super.dispose();
   }
 
@@ -217,29 +223,53 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
           ),
 
-          // Main Content
+          // Main Content — background refresh: stream MOJA kutoka initState.
+          // Offline/stream imeshindwa -> cache ya ndani inaonekana (hakuna
+          // loader wa ukurasa mzima). Error inaonyeshwa TU iwapo hakuna
+          // data kabisa (NoInternetView ndogo yenye "Jaribu tena").
           StreamBuilder<List<ChatModel>>(
-            stream: _matchmakingService.streamMyChatRooms(),
+            stream: _chatsStream,
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: HeartLoader(size: 64));
+              List<ChatModel> chats = snapshot.data ?? [];
+
+              if (snapshot.hasData && chats.isNotEmpty) {
+                // Data halisi imewasili — sasisha cache background.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  final String uid =
+                      Supabase.instance.client.auth.currentUser?.id ?? '';
+                  ChatCacheService.instance.saveChats(uid, chats);
+                  if (_cachedChats.length != chats.length) {
+                    _cachedChats = chats;
+                  }
+                });
               }
 
-              if (snapshot.hasError) {
-                // Show an error if the chat-rooms stream fails to load from Supabase.
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Text(
-                      "Failed to load conversations: ${snapshot.error}",
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.redAccent),
+              if (snapshot.hasError && chats.isEmpty) {
+                if (_cachedChats.isNotEmpty) {
+                  // Refresh imeshindwa background — onyesha cache kimya.
+                  chats = _cachedChats;
+                } else {
+                  // Hakuna data kabisa + hakuna internet — onyesha error
+                  // ndogo tu (si ukurasa mzima wa hitilafu).
+                  return Center(
+                    child: SingleChildScrollView(
+                      child: NoInternetView(onRetry: _refreshChats),
                     ),
-                  ),
-                );
+                  );
+                }
               }
 
-              final chats = snapshot.data ?? [];
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  chats.isEmpty) {
+                if (_cachedChats.isNotEmpty) {
+                  // Bado tunasubiri mtandao — onyesha cache, refresh
+                  // inaendelea background.
+                  chats = _cachedChats;
+                } else {
+                  return const Center(child: HeartLoader(size: 64));
+                }
+              }
 
               if (chats.isEmpty) {
                 return Center(

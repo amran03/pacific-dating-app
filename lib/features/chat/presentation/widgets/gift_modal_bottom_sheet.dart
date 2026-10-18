@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/gift_model.dart';
 import 'package:pacific_dating_app/core/services/supabase_service.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
+import 'package:pacific_dating_app/core/services/push_sender.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
 import 'package:pacific_dating_app/core/constants/app_radius.dart';
@@ -181,6 +184,14 @@ class _GiftSheetContentState extends State<_GiftSheetContent> {
         } catch (e) {
           debugPrint('gift notification skipped (non-fatal): $e');
         }
+        // FCM — mpokeaji apate arifa ya zawadi hata akiwa nje ya app.
+        unawaited(PushSender.send(
+          toUid: widget.recipientUid,
+          type: 'gift',
+          title: 'You received a New Gift! 🎁',
+          body: 'Umetumiwa ${gift.emoji ?? '🎁'} ${gift.name}.',
+          fromUid: myUid,
+        ));
       }
 
       // Mark gift as permanently unlocked after successful send

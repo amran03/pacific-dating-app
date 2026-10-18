@@ -37,13 +37,34 @@ class PushService {
     if (!_ready) return;
     try {
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      // Mtumiaji aligusa arifa ya FCM iliyonyeshwa na mfumo (app ilikuwa
+      // background, process bado iko hai) — bila listener hii hakuna
+      // routing: app ingefunguka tu bila kufungua chat/call husika.
+      // (getInitialMessage hapo chini inashughulikia cold-start tu.)
+      FirebaseMessaging.onMessageOpenedApp.listen(_onOpenedMessage);
       final initial = await FirebaseMessaging.instance.getInitialMessage();
       if (initial != null) _routeMessage(initial.data);
     } catch (_) {}
   }
 
+  /// App ilifunguliwa kwa kugusa arifa ya FCM iliyonyeshwa na mfumo wa
+  /// iOS/Android (notification payload — k.m. ya simu). Routing ni kama
+  /// mtapato wa arifa: fungua chat, au weka call pending kwa UI.
+  static void _onOpenedMessage(RemoteMessage msg) {
+    final data = msg.data;
+    final type = data['type']?.toString() ?? '';
+    NotificationService.instance.handlePushTap(
+      type == 'call' ? encodeCallPayload(data) : encodeChatPayload(data),
+    );
+  }
+
   /// Call after login. Fetches the FCM token, requests Android 13+
   /// permission, and stores the token on the user row.
+  ///
+  /// Muhimu: inatumia RPC `register_fcm_token` KWANZA (SECURITY DEFINER)
+  /// kwa sababu hakuna RLS UPDATE policy kwenye `users` — direct update
+  /// ingeshindwa kimya (rows 0). RPC ikiwa haipo bado (migration
+  /// haija-run), inajaribu direct update kama fallback.
   static Future<void> registerAfterLogin(String uid) async {
     if (!_ready) return;
     try {
@@ -51,20 +72,46 @@ class PushService {
       await messaging.requestPermission(alert: true, badge: true, sound: true);
       final token = await messaging.getToken();
       if (token == null || token.isEmpty) return;
-      await Supabase.instance.client.from('users').update(
-        {'fcm_token': token},
-      ).eq('uid', uid);
+      await _saveToken(token);
       FirebaseMessaging.instance.onTokenRefresh.listen((t) async {
         try {
           final currentUid =
               Supabase.instance.client.auth.currentUser?.id;
           if (currentUid == null) return;
-          await Supabase.instance.client.from('users').update(
-            {'fcm_token': t},
-          ).eq('uid', currentUid);
+          await _saveToken(t);
         } catch (_) {}
       });
     } catch (_) {}
+  }
+
+  /// Hifadhi FCM token — RPC kwanza (inapita RLS salama), fallback
+  /// direct update (kwa DB yenye policy ya zamani).
+  static Future<void> _saveToken(String token) async {
+    final client = Supabase.instance.client;
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return;
+    bool saved = false;
+    try {
+      await client.rpc('register_fcm_token', params: {'p_token': token});
+      saved = true;
+    } catch (e) {
+      debugPrint('Pacific: register_fcm_token RPC missing ($e) — fallback');
+    }
+    if (!saved) {
+      try {
+        final res = await client
+            .from('users')
+            .update({'fcm_token': token})
+            .eq('uid', uid)
+            .select('fcm_token');
+        saved = (res as List).isNotEmpty;
+      } catch (_) {}
+    }
+    if (!saved) {
+      debugPrint(
+          'Pacific: FCM token NOT saved — run 20261018130000 migration. '
+          'Push nje ya app haitafanya kazi mpaka hapo.');
+    }
   }
 
   static Future<void> _onForegroundMessage(RemoteMessage msg) async {

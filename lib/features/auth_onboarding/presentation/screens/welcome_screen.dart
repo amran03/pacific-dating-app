@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
+import 'package:pacific_dating_app/core/services/auth_errors.dart';
+import 'package:pacific_dating_app/core/services/google_auth_service.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/login_screen.dart';
+import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/name_screen.dart';
+import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
 import 'package:pacific_dating_app/core/constants/app_radius.dart';
 
@@ -17,6 +21,53 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     with SingleTickerProviderStateMixin {
   // Float animation: app icon gently floats up/down (alive feeling).
   late final AnimationController _floatController;
+
+  bool _isGoogleLoading = false;
+
+  /// GOOGLE SIGN-IN — akaunti mpya ya Google: tengeneza users row (jina,
+  /// avatar, email kutoka Google) na anza onboarding (Name -> Birthday ->
+  /// Gender -> Photos). Mtumiaji wa zamani aliye-kamilisha profile anaingia
+  /// dashboard moja kwa moja. AuthGate kwenye root pia inasikiliza session.
+  Future<void> _continueWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    try {
+      final result = await GoogleAuthService.instance.signInWithGoogle();
+      // null = mtumiaji alighairi chaguo (si hitilafu).
+      if (result == null || !mounted) return;
+
+      if (result.profileComplete) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const MainDashboardScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const NameScreen()),
+          (route) => false,
+        );
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      showAppNotification(
+        context,
+        friendlyAuthError(e),
+        color: Colors.redAccent,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      // Kamwe onyeshi ujumbe mbichi ($e) — friendlyAuthError hurudisha
+      // ujumbe rafiki (mtandao / hitilafu ya kawaida) + raw kwenye debug.
+      showAppNotification(
+        context,
+        'Google sign-in failed. ${friendlyAuthError(e)}',
+        color: Colors.redAccent,
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
 
   @override
   void initState() {
@@ -33,9 +84,11 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.dispose();
   }
 
-  void _showPhoneNumberInputSheet(BuildContext parentContext) {
-    final TextEditingController phoneController = TextEditingController();
-    const String selectedCountryCode = "+255";
+  /// Popup ya CREATE ACCOUNT — inaomba EMAIL (badala ya namba ya simu).
+  /// Baada ya kuendelea, CreatePasswordScreen inaundia akaunti na kutuma
+  /// OTP ya tarakimu 6 kwenye email hiyo kuthibitisha (mfumo wa OTP).
+  void _showEmailInputSheet(BuildContext parentContext) {
+    final TextEditingController emailController = TextEditingController();
 
     showModalBottomSheet(
       context: parentContext,
@@ -71,7 +124,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      'Enter Your Phone Number',
+                      'Enter Your Email',
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -80,66 +133,29 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'We will use this number as your login ID.',
+                      'We will send a verification code (OTP) to confirm it is you.',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 14,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: AppRadius.md,
-                          ),
-                          child: const Row(
-                            children: [
-                              Text(
-                                "TZ",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                selectedCountryCode,
-                                style: TextStyle(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: AppRadius.md,
+                      ),
+                      child: TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.email],
+                        decoration: const InputDecoration(
+                          hintText: "you@example.com",
+                          border: InputBorder.none,
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: AppRadius.md,
-                            ),
-                            child: TextField(
-                              controller: phoneController,
-                              keyboardType: TextInputType.phone,
-                              maxLength: 9,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: "7XXXXXXXX",
-                                counterText: "",
-                                border: InputBorder.none,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
@@ -155,26 +171,24 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                           ),
                         ),
                         onPressed: () {
-                          String digits = phoneController.text.trim();
+                          final String email = emailController.text.trim();
 
-                          if (digits.length < 9) {
-                            showAppNotification(sheetContext, 'Enter a valid 9-digit number.', color: Colors.redAccent);
+                          if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                              .hasMatch(email)) {
+                            showAppNotification(
+                              sheetContext,
+                              'Enter a valid email address.',
+                              color: Colors.redAccent,
+                            );
                             return;
                           }
-
-                          if (digits.startsWith('0')) {
-                            digits = digits.substring(1);
-                          }
-
-                          final String fullPhoneNumber =
-                              "$selectedCountryCode$digits";
 
                           Navigator.pop(sheetContext);
                           Navigator.push(
                             parentContext,
                             MaterialPageRoute(
                               builder: (context) => CreatePasswordScreen(
-                                phoneNumber: fullPhoneNumber,
+                                email: email,
                               ),
                             ),
                           );
@@ -394,7 +408,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                         ),
                                       ),
                                       onPressed: () =>
-                                          _showPhoneNumberInputSheet(context),
+                                          _showEmailInputSheet(context),
                                       child: Text(
                                         'Create Account',
                                         style: const TextStyle(
@@ -407,6 +421,50 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                   ),
                                 ),
                                 const SizedBox(height: 16),
+                                const SizedBox(height: 12),
+                                // GOOGLE SIGN-IN — akaunti mpya: onboarding;
+                                // ya zamani (profile kamili): dashboard.
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: AppColors.primary,
+                                        width: 1.5,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: AppRadius.xl,
+                                      ),
+                                    ),
+                                    onPressed: _isGoogleLoading
+                                        ? null
+                                        : _continueWithGoogle,
+                                    icon: _isGoogleLoading
+                                        ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.primaryDeep,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.g_mobiledata_rounded,
+                                            size: 30,
+                                            color: AppColors.primaryDeep,
+                                          ),
+                                    label: const Text(
+                                      'Continue with Google',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryDeep,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
                                 SizedBox(
                                   width: double.infinity,
                                   height: 56,

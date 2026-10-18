@@ -5,6 +5,7 @@ import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
 import 'package:pacific_dating_app/features/profile/presentation/widgets/profile_image_with_ring.dart';
+import 'package:pacific_dating_app/features/profile/presentation/widgets/profile_photo_carousel.dart';
 import 'package:pacific_dating_app/features/chat/presentation/individual_chat_screen.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
 import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
@@ -180,21 +181,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
 
   /// Real avatar fallback: initials on a gradient, used when the user
   /// has no profile photo (or the photo URL is broken).
-  Widget _initialsHeader(String name) {
-    return Container(
-      color: AppColors.primary,
-      alignment: Alignment.center,
-      child: Text(
-        name.isNotEmpty ? name[0].toUpperCase() : '?',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 110,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,15 +233,15 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   background: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (imageUrl.isNotEmpty)
-                        Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              _initialsHeader(user.name),
-                        )
-                      else
-                        _initialsHeader(user.name),
+                      // Carousel ya picha zote (max 6) — PageView + dots.
+                      // Inarudi kwenye picha ya mbele (imageUrl) kama hakuna
+                      // picha nyingi, au initials kama hana picha kabisa.
+                      ProfilePhotoCarousel(
+                        uid: widget.uid,
+                        fallbackUrl: imageUrl,
+                        initials:
+                            user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                      ),
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(

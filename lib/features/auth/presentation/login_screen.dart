@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/constants/app_color.dart';
 import 'package:pacific_dating_app/core/services/auth_errors.dart';
+import 'package:pacific_dating_app/core/services/google_auth_service.dart';
 import 'package:pacific_dating_app/features/dashboard/presentation/screens/main_dashboard_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/reset_password_screen.dart';
+import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/name_screen.dart';
 import 'package:pacific_dating_app/features/auth_onboarding/presentation/screens/welcome_screen.dart';
 import 'package:pacific_dating_app/features/auth/presentation/create_password_screen.dart';
 import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
@@ -22,6 +24,43 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isPasswordHidden = true;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
+
+  /// GOOGLE SIGN-IN — mtumiaji wa sasa anaingia moja kwa moja; akaunti
+  /// mpya (au bado onboarding) inaendelea kwenye NameScreen. AuthGate
+  /// kwenye root pia inasikiliza mabadiliko ya session.
+  Future<void> _loginWithGoogle() async {
+    setState(() => _isGoogleLoading = true);
+    try {
+      final result = await GoogleAuthService.instance.signInWithGoogle();
+      // null = mtumiaji alighairi chaguo (si hitilafu).
+      if (result == null || !mounted) return;
+
+      if (result.profileComplete) {
+        _showMessage("Logged in successfully!", Colors.green);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const MainDashboardScreen()),
+          (route) => false,
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const NameScreen()),
+          (route) => false,
+        );
+      }
+    } on AuthException catch (e) {
+      _showMessage(friendlyAuthError(e), Colors.redAccent);
+    } catch (e) {
+      // Kamwe ujumbe mbichi ($e) — friendlyAuthError (mtandao/hitilafu)
+      // hurudisha ujumbe rafiki; raw inaenda kwenye debug tu.
+      _showMessage(
+          "Google sign-in failed. ${friendlyAuthError(e)}", Colors.redAccent);
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
 
   Future<void> _login() async {
     final String rawInput = _emailController.text.trim();
@@ -225,6 +264,48 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // GOOGLE SIGN-IN — mtumiaji wa sasa anaingia moja kwa moja;
+              // akaunti mpya anaanza onboarding (Name -> Gender -> ...).
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.xl,
+                    ),
+                  ),
+                  onPressed: _isGoogleLoading ? null : _loginWithGoogle,
+                  icon: _isGoogleLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primaryDeep,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.g_mobiledata_rounded,
+                          size: 30,
+                          color: AppColors.primaryDeep,
+                        ),
+                  label: const Text(
+                    'Continue with Google',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryDeep,
                     ),
                   ),
                 ),

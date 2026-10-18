@@ -1,9 +1,11 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:zego_uikit_prebuilt_call/zego_uikit_prebuilt_call.dart';
+import 'package:zego_uikit/zego_uikit.dart';
 import 'package:zego_uikit_signaling_plugin/zego_uikit_signaling_plugin.dart';
 
 import 'call_service.dart';
+import '../constants/app_color.dart';
 
 /// ============================================================
 /// ZEGOCLOUD 1-on-1 voice & video calls (invitation service).
@@ -16,7 +18,140 @@ import 'call_service.dart';
 ///
 /// Lifecycle: `init()` mara tu login ya Supabase imethibitika,
 /// `uninit()` kwenye logout (presence_tracker ndipo hii inapokelewa).
-class ZegoCallService {
+///
+/// UI: Zego pages zote (waiting/calling + active call) zimepakwa rangi
+/// ya Pacific kupitia [_pacificUI] (backgroundBuilder, avatar za picha
+/// halisi, hangup button ya gradient) — tazama `zego_call_theme.dart`.
+
+/// ============================================================
+/// ZEGOCLOUD 1-on-1 voice & video calls (invitation service).
+/// ============================================================
+///
+/// * appID: `--dart-define=ZEGO_APP_ID=...` (default: 1740448927)
+/// * appSign: **HAIPASWI** kuwa kwenye source — inatoka tu
+///   `--dart-define=ZEGO_APP_SIGN=...`. Bila sign, init inaachwa
+///   (calls hazitafanya kazi, lakini app haikangi).
+///
+/// Lifecycle: `init()` mara tu login ya Supabase imethibitika,
+/// `uninit()` kwenye logout (presence_tracker ndipo hii inapokelewa).
+
+
+/// --- ZEGO CALL THEME CONFIGS (moved from zengo_call_theme.dart) ---
+
+ZegoUIKitPrebuiltCallConfig pacificVoiceCallConfig() =>
+    ZegoUIKitPrebuiltCallConfig(
+      videoConfig: ZegoUIKitVideoConfig.preset360P(),
+      avatarBuilder: _pacificAvatarBuilder,
+      audioVideoViewConfig: ZegoCallAudioVideoViewConfig(
+        backgroundBuilder: _pacificActiveBackground,
+        showAvatarInAudioMode: true,
+        showSoundWavesInAudioMode: true,
+        useVideoViewAspectFill: true,
+      ),
+      topMenuBarConfig: ZegoCallTopMenuBarConfig(
+        backgroundColor: Colors.transparent,
+        height: 56,
+      ),
+      bottomMenuBarConfig: ZegoCallBottomMenuBarConfig(
+        backgroundColor: Colors.black.withValues(alpha: 0.30),
+      ),
+    );
+
+ZegoUIKitPrebuiltCallConfig pacificVideoCallConfig() =>
+    ZegoUIKitPrebuiltCallConfig(
+      videoConfig: ZegoUIKitVideoConfig.preset720P(),
+      avatarBuilder: _pacificAvatarBuilder,
+      audioVideoViewConfig: ZegoCallAudioVideoViewConfig(
+        backgroundBuilder: _pacificActiveBackground,
+        showAvatarInAudioMode: true,
+        useVideoViewAspectFill: true,
+      ),
+      topMenuBarConfig: ZegoCallTopMenuBarConfig(
+        backgroundColor: Colors.transparent,
+        height: 56,
+      ),
+      bottomMenuBarConfig: ZegoCallBottomMenuBarConfig(
+        backgroundColor: Colors.black.withValues(alpha: 0.30),
+      ),
+    );
+
+
+
+/// Avatar halisi kama picha ipo; hivyo kivuto cha rangi kama place holder.
+Widget _pacificAvatar(BuildContext context, ZegoUIKitUser? user, double size, Map<String, dynamic> extraInfo) {
+  final imageUrl = (extraInfo['profile_image_url'] as String?)?.isNotEmpty == true
+      ? extraInfo['profile_image_url']
+      : '';
+  final url = (imageUrl is String) ? imageUrl : '';
+  return Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: const LinearGradient(
+        colors: AppColors.primaryGradient,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: 0.35),
+        width: 2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.4),
+          blurRadius: 24,
+          offset: const Offset(0, 8),
+        ),
+      ],
+    ),
+    child: ClipOval(
+      child: url.isNotEmpty
+          ? Image.network(
+              url,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _avatarFallback(user, size),
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                  ),
+                );
+              },
+            )
+          : _avatarFallback(user, size),
+    ),
+  );
+}
+
+Widget _avatarFallback(ZegoUIKitUser? user, double size) {
+  final initial = _userName(user).isNotEmpty
+      ? _userName(user)[0].toUpperCase()
+      : '?';
+  return Center(
+    child: Text(
+      initial,
+      style: const TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+        color: Colors.white,
+      ),
+    ),
+  );
+}ZegoAvatarBuilder _pacificAvatarBuilder =
+    (context, size, user, extraInfo) => _pacificAvatar(context, user, size.width, extraInfo);
+
+ZegoAudioVideoViewBackgroundBuilder _pacificActiveBackground =
+    (context, size, user, extraInfo) => Container(
+      color: Colors.black.withValues(alpha: 0.90),
+    );
+
+/// _helper: jina la msingi kwa user.
+String _userName(ZegoUIKitUser? user) =>
+    (user?.name ?? '').isNotEmpty ? user!.name : 'Pacific User';class ZegoCallService {
   ZegoCallService._internal();
 
   static final ZegoCallService instance = ZegoCallService._internal();
@@ -91,12 +226,11 @@ class ZegoCallService {
             ),
           ),
         ),
-        // Voice call = bila camera; video call = camera inawashwa.
         requireConfig: (data) {
           if (data.type == ZegoCallInvitationType.videoCall) {
-            return ZegoUIKitPrebuiltCallConfig.oneOnOneVideoCall();
+            return pacificVideoCallConfig();
           }
-          return ZegoUIKitPrebuiltCallConfig.oneOnOneVoiceCall();
+          return pacificVoiceCallConfig();
         },
       );
 
@@ -140,3 +274,25 @@ class ZegoCallService {
     return 'Pacific User';
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

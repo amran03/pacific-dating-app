@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:math';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pacific_dating_app/features/profile/data/user_model.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
+import 'push_sender.dart';
 
 class MatchmakingService {
   final _client = Supabase.instance.client;
@@ -187,16 +191,27 @@ class MatchmakingService {
     }
   }
 
-  /// Kucha wa Discover: aonyeshe TU watu wanaolingana na jinsia
-  /// aliyoipendelea kuona (`interested_gender` ya mtumiaji).
-  /// Mfano: mwanaume aliyesema "Wanawake" haoni wanaume wenzake.
-  /// Ikiwa mtumiaji hajaongea preference (null/empty) au amechagua
-  /// "Everyone" — watu wote wanaonekana (hakuna filter).
+  /// Kucha wa Discover: mwanaume aone WANAWAKE tu; mwanamke aone WANAUME tu
+  /// ("sio vinginevyo"). Tunatumia jinsia YA MTAZAMAJI (gender) kama msingi.
+  /// Kama jinsia ya mtazamaji haijulikani/other, turudi kwenye
+  /// interested_gender (everyone => hakuna filter).
   List<UserModel> _applyGenderPreference(
     List<UserModel> candidates,
-    String? interestedRaw,
+    Map<String, String?> prefs,
   ) {
-    final wanted = normalizeInterest(interestedRaw);
+    final String myGender = normalizeGender(prefs['gender']);
+    if (myGender == 'male') {
+      return candidates
+          .where((u) => normalizeGender(u.gender) == 'female')
+          .toList();
+    }
+    if (myGender == 'female') {
+      return candidates
+          .where((u) => normalizeGender(u.gender) == 'male')
+          .toList();
+    }
+    // Jinsia haijulikani/other — tumia mapendeleo (interested_gender).
+    final String wanted = normalizeInterest(prefs['interested']);
     if (wanted == 'everyone') return candidates;
     return candidates.where((u) => normalizeGender(u.gender) == wanted).toList();
   }
@@ -279,7 +294,7 @@ class MatchmakingService {
     // Best-effort: kama fetch ya prefs imeshindikana, watu wote wanaonekana
     // (hatuoki Discover kuwa tupu kwa sababu ya network blip).
     final myPrefs = await _fetchMyGenderPrefs();
-    candidates = _applyGenderPreference(candidates, myPrefs['interested']);
+    candidates = _applyGenderPreference(candidates, myPrefs);
 
     final Map<String, int> tierPriority = {
       'diamond': 3,
@@ -380,6 +395,25 @@ class MatchmakingService {
         'read': false,
       }
     ]);
+
+    // FCM — arifa ya match ifike hata app ikiwa nje/imezimwa (realtime
+    // ni mbele tu). Best-effort: PushSender haiteketezi.
+    unawaited(PushSender.send(
+      toUid: otherUid,
+      type: 'match',
+      title: 'You got a Match! 🎉',
+      body: 'You and $myName liked each other!',
+      fromUid: _myUid ?? '',
+      fromName: myName,
+    ));
+    unawaited(PushSender.send(
+      toUid: _requireUid,
+      type: 'match',
+      title: 'You got a Match! 🎉',
+      body: 'You and $theirName liked each other!',
+      fromUid: otherUid,
+      fromName: theirName,
+    ));
   }
 
   Future<Map<String, dynamic>> getChatAccessInfo(String otherUid) async {
@@ -400,6 +434,20 @@ class MatchmakingService {
   }
 
   Future<void> payAndUnlockChat(String otherUid) async {
+    // RPC ya atomic KWANZA (transaction moja DB): salio kupungua kwa
+    // payer, kuongezwa kwa mpokeaji, unlocked_by na notification — vyote
+    // pamoja. Mpokeaji APATE coins NA HAKUTINGUKA, bila race ya
+    // read-then-write ya zamani.
+    try {
+      await _client.rpc('pay_and_unlock_chat', params: {
+        'p_other_uid': otherUid,
+      });
+      return;
+    } catch (_) {
+      // RPC haijapatikana bado (migration haija-run) — legacy fallback.
+      debugPrint('pay_and_unlock_chat RPC missing, legacy fallback');
+    }
+
     final String chatId = chatIdFor(otherUid);
     final String uid = _requireUid;
     final ids = [uid, otherUid]..sort();
@@ -450,6 +498,15 @@ class MatchmakingService {
         'created_at': DateTime.now().toIso8601String(),
         'read': false,
       });
+      // FCM — mpokeaji apate arifa ya coins hata akiwa nje ya app.
+      unawaited(PushSender.send(
+        toUid: otherUid,
+        type: 'coins',
+        title: 'You received Coins! 🪙',
+        body: '${myProfile?.name ?? 'User'} paid $price Coins to unlock chat with you.',
+        fromUid: uid,
+        fromName: myProfile?.name ?? 'User',
+      ));
     }
   }
 
@@ -690,6 +747,17 @@ class MatchmakingService {
         'p_coin_cost': coinCost,
         'p_from_name': fromName,
       });
+      // RPC imeingiza notifications row ndani ya SQL — tuma FCM pia ili
+      // arifa ifike nje ya app (best-effort).
+      unawaited(PushSender.send(
+        toUid: toUid,
+        type: 'gift',
+        title: 'You received a New Gift! 🎁',
+        body:
+            '$fromName sent you ${giftEmoji.isEmpty ? '🎁' : giftEmoji} $giftName.',
+        fromUid: _requireUid,
+        fromName: fromName,
+      ));
       return;
     } catch (_) {
       // No RPC — legacy fallback (best-effort).
@@ -717,6 +785,16 @@ class MatchmakingService {
             '${giftEmoji.isEmpty ? '🎁' : giftEmoji} $giftName.',
         'created_at': DateTime.now().toIso8601String(), 'read': false,
       });
+      // FCM — zawadi ifike nje ya app pia.
+      unawaited(PushSender.send(
+        toUid: toUid,
+        type: 'gift',
+        title: 'You received a New Gift! 🎁',
+        body:
+            '$fromName sent you ${giftEmoji.isEmpty ? '🎁' : giftEmoji} $giftName.',
+        fromUid: uid,
+        fromName: fromName,
+      ));
     } catch (_) {}
   }
 

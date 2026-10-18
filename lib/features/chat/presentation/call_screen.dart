@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' show FontFeature, ImageFilter;
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -88,6 +89,10 @@ class _CallScreenState extends State<CallScreen>
     with TickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final AnimationController _dotsController;
+  // Pete inayozunguka polepole kuzunguka avatar (connecting/ringing).
+  late final AnimationController _spinController;
+  // Mlango wa screen — controls zinaingia staggered (elastic).
+  late final AnimationController _enterController;
 
   CallPhase _phase = CallPhase.ringing;
   int _seconds = 0;
@@ -195,6 +200,14 @@ class _CallScreenState extends State<CallScreen>
 
     _pulseController.repeat();
     _dotsController.repeat();
+    _spinController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    )..repeat();
+    _enterController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
 
     _localRenderer.initialize();
     _remoteRenderer.initialize();
@@ -632,6 +645,11 @@ class _CallScreenState extends State<CallScreen>
     }
   }
 
+  /// Kichwa cha audio scene — kinabadilika na phase (jina, kisha wakati
+  /// wa simu unapoanza ili mtumiaji aone muda mara moja).
+  String get _audioHeaderTitle =>
+      _phase == CallPhase.ongoing ? _formattedDuration : widget.peerName;
+
   @override
   void dispose() {
     CallScreen._activeInstances--;
@@ -641,6 +659,8 @@ class _CallScreenState extends State<CallScreen>
     _ringPlayer.dispose();
     _pulseController.dispose();
     _dotsController.dispose();
+    _spinController.dispose();
+    _enterController.dispose();
     _teardownWebRTC();
     super.dispose();
   }
@@ -767,38 +787,87 @@ class _CallScreenState extends State<CallScreen>
             end: Alignment.bottomCenter,
           ),
         ),
-        child: SafeArea(
-          child: Stack(
-            children: [
-              // Decorative glow
-              Positioned(
-                top: -80,
-                right: -60,
-                child: Container(
-                  width: 240,
-                  height: 240,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _sceneAccent.withValues(alpha: 0.10),
-                  ),
-                ),
-              ),
-
-              Column(
+        child: Stack(
+          children: [
+            // AURORA — miale ya rangi inayoelea nyuma ya kila kitu
+            // (WhatsApp-style dark + Pacific pink vibes).
+            _buildAuroraOrbs(),
+            SafeArea(
+              child: Stack(
                 children: [
-                  _buildTopBar(),
-                  Expanded(
-                    child: _isVideo
-                        ? _buildVideoScene()
-                        : _buildAudioScene(),
+                  // Decorative glow
+                  Positioned(
+                    top: -80,
+                    right: -60,
+                    child: Container(
+                      width: 240,
+                      height: 240,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _sceneAccent.withValues(alpha: 0.10),
+                      ),
+                    ),
                   ),
-                  _buildControls(),
+
+                  Column(
+                    children: [
+                      _buildTopBar(),
+                      Expanded(
+                        child: _isVideo
+                            ? _buildVideoScene()
+                            : _buildAudioScene(),
+                      ),
+                      _buildControls(),
+                    ],
+                  ),
                 ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  // ============================================================
+  // AURORA BACKGROUND — miale 3 ya neon inayoelea polepole.
+  // ============================================================
+
+  Widget _buildAuroraOrbs() {
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, _) {
+        final t = _pulseController.value;
+        return Stack(
+          children: [
+            Positioned(
+              top: -60 + 24 * sin(t * 2 * pi),
+              left: -70 + 18 * cos(t * 2 * pi),
+              child: _orb(230, AppColors.primary.withValues(alpha: 0.22)),
+            ),
+            Positioned(
+              bottom: -40 + 20 * cos(t * 2 * pi),
+              right: -60 + 22 * sin(t * 2 * pi * 0.7),
+              child: _orb(
+                  260, const Color(0xFF7C4DFF).withValues(alpha: 0.18)),
+            ),
+            Positioned(
+              top: 200 + 26 * sin(t * 2 * pi * 0.5 + 1),
+              right: -90,
+              child: _orb(
+                  170, const Color(0xFF40C4FF).withValues(alpha: 0.12)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _orb(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: color),
     );
   }
 
@@ -807,20 +876,73 @@ class _CallScreenState extends State<CallScreen>
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          Icon(
-            Icons.lock_rounded,
-            size: 14,
-            color: Colors.white.withValues(alpha: 0.7),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'End-to-end encrypted',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: Colors.white.withValues(alpha: 0.7),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white.withValues(alpha: 0.10),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.18),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_rounded,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.8),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'End-to-end encrypted',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
             ),
           ),
+          const Spacer(),
+          if (_phase == CallPhase.ongoing)
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: AppColors.primary.withValues(alpha: 0.22),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.5),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFF7BF1A8),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _formattedDuration,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -836,27 +958,75 @@ class _CallScreenState extends State<CallScreen>
       children: [
         _buildPulsingAvatar(size: 140),
         const SizedBox(height: 28),
-        Text(
-          widget.peerName,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+        // Jina linabadilika na phase (fade + slide).
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.25),
+                end: Offset.zero,
+              ).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+              child: child,
+            ),
+          ),
+          child: Text(
+            _audioHeaderTitle,
+            key: ValueKey(_audioHeaderTitle),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 14),
+        // Status pill ya glass — dot inayopulse + text.
         AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          child: Text(
-            _statusText,
+          duration: const Duration(milliseconds: 350),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(scale: animation, child: child),
+          ),
+          child: Container(
             key: ValueKey(_statusText),
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: _phase == CallPhase.ongoing
-                  ? AppColors.callGreen
-                  : Colors.white.withValues(alpha: 0.75),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30),
+              color: Colors.white.withValues(alpha: 0.12),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.22),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildStatusDot(),
+                const SizedBox(width: 8),
+                Text(
+                  _statusText,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: _phase == CallPhase.ongoing
+                        ? const Color(0xFF7BF1A8)
+                        : Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -865,6 +1035,37 @@ class _CallScreenState extends State<CallScreen>
           _buildRingingDots(),
         ],
       ],
+    );
+  }
+
+  /// Dot inayopulse (kijani wakati wa kuongea, pink wakati wa kupiga).
+  Widget _buildStatusDot() {
+    final color = _phase == CallPhase.ongoing
+        ? AppColors.callGreen
+        : AppColors.primary;
+    return AnimatedBuilder(
+      animation: _dotsController,
+      builder: (context, _) {
+        final t = _dotsController.value;
+        final scale = 1.0 + 0.35 * sin(t * 2 * pi);
+        final glow = 0.35 + 0.35 * sin(t * 2 * pi);
+        return Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color,
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: glow.clamp(0.0, 0.7)),
+                blurRadius: 10,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Transform.scale(scale: scale, child: Container()),
+        );
+      },
     );
   }
 
@@ -904,15 +1105,28 @@ class _CallScreenState extends State<CallScreen>
                   children: [
                     _buildPulsingAvatar(size: 110),
                     const SizedBox(height: 22),
-                    Text(
-                      widget.peerName,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                    // Chip ya jina juu ya video placeholder.
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.black.withValues(alpha: 0.45),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        widget.peerName,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
                       child: Text(
@@ -922,7 +1136,7 @@ class _CallScreenState extends State<CallScreen>
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                           color: _phase == CallPhase.ongoing
-                              ? AppColors.callGreen
+                              ? const Color(0xFF7BF1A8)
                               : Colors.white.withValues(alpha: 0.75),
                         ),
                       ),
@@ -937,7 +1151,7 @@ class _CallScreenState extends State<CallScreen>
             ),
           ),
 
-          // Local PiP preview
+          // Local PiP preview — na kivuli cha pink + lebo "You".
           Positioned(
             top: 16,
             right: 16,
@@ -947,7 +1161,7 @@ class _CallScreenState extends State<CallScreen>
               width: 96,
               height: 128,
               decoration: BoxDecoration(
-                borderRadius: AppRadius.md,
+                borderRadius: BorderRadius.circular(18),
                 gradient: _isVideoEnabled
                     ? LinearGradient(
                         colors: AppColors.primaryGradient,
@@ -958,10 +1172,15 @@ class _CallScreenState extends State<CallScreen>
                         colors: [Color(0xFF1C1F26), Color(0xFF1C1F26)],
                       ),
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  width: 1.5,
+                  color: _sceneAccent.withValues(alpha: 0.6),
+                  width: 2,
                 ),
                 boxShadow: [
+                  BoxShadow(
+                    color: _sceneAccent.withValues(alpha: 0.35),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.45),
                     blurRadius: 16,
@@ -989,6 +1208,69 @@ class _CallScreenState extends State<CallScreen>
               ),
             ),
           ),
+          // Lebo "You" kwenye PiP + muda wa simu chini ya video.
+          Positioned(
+            top: 24,
+            right: 24,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.black.withValues(alpha: 0.55),
+              ),
+              child: const Text(
+                'You',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+          if (_phase == CallPhase.ongoing)
+            Positioned(
+              bottom: 16,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: Colors.black.withValues(alpha: 0.55),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFF7BF1A8),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${widget.peerName} • $_formattedDuration',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1008,10 +1290,37 @@ class _CallScreenState extends State<CallScreen>
       child: Stack(
         alignment: Alignment.center,
         children: [
+          // Pink aura — avatar inang'aa gizani (impressive glow).
+          Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: _sceneAccent.withValues(alpha: 0.55),
+                  blurRadius: 54,
+                  spreadRadius: 10,
+                ),
+              ],
+            ),
+          ),
           if (showRings) ...[
             _buildRing(0, size),
             _buildRing(0.33, size),
             _buildRing(0.66, size),
+            // Pete inayozunguka (spinning dashed arc) — inaashiria kuwa
+            // simu bado inaunganishwa.
+            AnimatedBuilder(
+              animation: _spinController,
+              builder: (context, _) => CustomPaint(
+                size: Size(size * 1.35, size * 1.35),
+                painter: _SpinningArcPainter(
+                  rotation: _spinController.value * 2 * pi,
+                  color: _sceneAccent,
+                ),
+              ),
+            ),
           ],
           Container(
             width: size,
@@ -1117,85 +1426,195 @@ class _CallScreenState extends State<CallScreen>
       return _buildIncomingActions();
     }
 
+    // FittedBox: kwenye skrini ndogo (<=360px) Row ya buttons haifikiwi
+    // overflow — inapunguza kiwango kidogo badala ya kukata.
+    // GLASS DOCK: frosted bar inayobeba controls.
     return Padding(
       padding: const EdgeInsets.only(left: 20, right: 20, bottom: 26),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _CallButton(
-            icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-            label: _isMuted ? 'Unmute' : 'Mute',
-            active: _isMuted,
-            onPressed: () {
-              setState(() => _isMuted = !_isMuted);
-              // Enable/disable the local audio track.
-              _localStream?.getAudioTracks().forEach((track) {
-                track.enabled = !_isMuted;
-              });
-            },
-          ),
-          _CallButton(
-            icon: _isSpeakerOn
-                ? Icons.volume_up_rounded
-                : Icons.volume_down_rounded,
-            label: 'Speaker',
-            active: _isSpeakerOn,
-            onPressed: () {
-              setState(() => _isSpeakerOn = !_isSpeakerOn);
-              Helper.setSpeakerphoneOn(_isSpeakerOn);
-            },
-          ),
-          if (_isVideo)
-            _CallButton(
-              icon: _isVideoEnabled
-                  ? Icons.videocam_rounded
-                  : Icons.videocam_off_rounded,
-              label: 'Video',
-              active: _isVideoEnabled,
-              onPressed: () {
-                setState(() => _isVideoEnabled = !_isVideoEnabled);
-                // Enable/disable the local camera.
-                _localStream?.getVideoTracks().forEach((track) {
-                  track.enabled = _isVideoEnabled;
-                });
-              },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(32),
+              color: Colors.white.withValues(alpha: 0.10),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.20),
+                width: 1,
+              ),
             ),
-          _CallButton(
-            icon: Icons.call_end_rounded,
-            label: 'End',
-            backgroundColor: AppColors.callRed,
-            onPressed: _endCall,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _enterAnimated(0, _muteButton()),
+                  const SizedBox(width: 6),
+                  _enterAnimated(1, _speakerButton()),
+                  const SizedBox(width: 6),
+                  if (_isVideo) ...[
+                    _enterAnimated(2, _videoButton()),
+                    const SizedBox(width: 6),
+                  ],
+                  _enterAnimated(3, _endButton()),
+                ],
+              ),
+            ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  /// Kila button inaingia na kucheza kidogo (staggered elastic) screen
+  /// ikifunguka — inaonekana hai, si static.
+  Widget _enterAnimated(int index, Widget child) {
+    return AnimatedBuilder(
+      animation: _enterController,
+      builder: (context, _) {
+        final start = (index * 0.12).clamp(0.0, 0.6);
+        final t = ((_enterController.value - start) / (1 - start))
+            .clamp(0.0, 1.0);
+        final eased =
+            Curves.elasticOut.transform(t.clamp(0.0, 1.0));
+        return Transform.translate(
+          offset: Offset(0, 46 * (1 - t)),
+          child: Transform.scale(
+            scale: 0.55 + 0.45 * eased.clamp(0.0, 1.15) / 1.15 * 1.15,
+            child: Opacity(opacity: t.clamp(0.0, 1.0), child: child),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _muteButton() {
+    return _CallButton(
+      icon: _isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+      label: _isMuted ? 'Unmute' : 'Mute',
+      active: _isMuted,
+      onPressed: () {
+        setState(() => _isMuted = !_isMuted);
+        // Enable/disable the local audio track.
+        _localStream?.getAudioTracks().forEach((track) {
+          track.enabled = !_isMuted;
+        });
+      },
+    );
+  }
+
+  Widget _speakerButton() {
+    return _CallButton(
+      icon: _isSpeakerOn
+          ? Icons.volume_up_rounded
+          : Icons.volume_down_rounded,
+      label: 'Speaker',
+      active: _isSpeakerOn,
+      onPressed: () {
+        setState(() => _isSpeakerOn = !_isSpeakerOn);
+        Helper.setSpeakerphoneOn(_isSpeakerOn);
+      },
+    );
+  }
+
+  Widget _videoButton() {
+    return _CallButton(
+      icon: _isVideoEnabled
+          ? Icons.videocam_rounded
+          : Icons.videocam_off_rounded,
+      label: 'Video',
+      active: _isVideoEnabled,
+      onPressed: () {
+        setState(() => _isVideoEnabled = !_isVideoEnabled);
+        // Enable/disable the local camera.
+        _localStream?.getVideoTracks().forEach((track) {
+          track.enabled = _isVideoEnabled;
+        });
+      },
+    );
+  }
+
+  Widget _endButton() {
+    return _CallButton(
+      icon: Icons.call_end_rounded,
+      label: 'End',
+      backgroundColor: AppColors.callRed,
+      onPressed: _endCall,
     );
   }
 
   Widget _buildIncomingActions() {
     return Padding(
       padding: const EdgeInsets.only(left: 20, right: 20, bottom: 40),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          _CallButton(
-            icon: Icons.call_end_rounded,
-            label: 'Decline',
-            backgroundColor: AppColors.callRed,
-            large: true,
-            onPressed: _decline,
-          ),
-          _CallButton(
-            icon: Icons.call_rounded,
-            label: 'Accept',
-            backgroundColor: AppColors.callGreen,
-            large: true,
-            withPulse: true,
-            onPressed: _accept,
-          ),
-        ],
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _CallButton(
+              icon: Icons.call_end_rounded,
+              label: 'Decline',
+              backgroundColor: AppColors.callRed,
+              large: true,
+              onPressed: _decline,
+            ),
+            const SizedBox(width: 48),
+            _CallButton(
+              icon: Icons.call_rounded,
+              label: 'Accept',
+              backgroundColor: AppColors.callGreen,
+              large: true,
+              withPulse: true,
+              onPressed: _accept,
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Pete ya arc inayozunguka kuzunguka avatar wakati simu inaunganishwa.
+class _SpinningArcPainter extends CustomPainter {
+  final double rotation;
+  final Color color;
+
+  const _SpinningArcPainter({required this.rotation, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2;
+    final paint = Paint()
+      ..color = color.withValues(alpha: 0.85)
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    // Arc mbili tofauti (kama spinner ya kisasa).
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      rotation,
+      pi * 0.55,
+      false,
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      rotation + pi,
+      pi * 0.3,
+      false,
+      paint..color = color.withValues(alpha: 0.4),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SpinningArcPainter old) =>
+      old.rotation != rotation || old.color != color;
 }
 
 /// A single animated call control button with correct, accessible colors:

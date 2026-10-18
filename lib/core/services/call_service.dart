@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../features/chat/presentation/call_screen.dart';
 import 'notification_service.dart';
+import 'push_sender.dart';
 
 /// Real call signaling using Supabase Realtime Broadcast.
 ///
@@ -148,6 +149,17 @@ class CallService {
         'read': false,
         'created_at': DateTime.now().toIso8601String(),
       });
+      // FCM — mpokeaji apate missed-call alert hata akiwa nje ya app.
+      unawaited(PushSender.send(
+        toUid: toUid,
+        type: 'missed_call',
+        title: declined ? 'Call declined 📵' : 'Missed call 📵',
+        body: declined
+            ? '$fromName did not answer ${isVideo ? 'video call' : 'your voice call'}.'
+            : 'You missed ${isVideo ? 'video call' : 'voice call'} from $fromName.',
+        fromUid: fromUid,
+        fromName: fromName,
+      ));
     } catch (_) {}
   }
 

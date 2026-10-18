@@ -11,6 +11,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacific_dating_app/core/services/storage_service.dart';
+import 'package:pacific_dating_app/core/services/chat_cache_service.dart';
+import 'package:pacific_dating_app/core/widgets/no_internet_view.dart';
+import 'package:pacific_dating_app/services/connectivity_service.dart';
 
 import 'package:pacific_dating_app/features/profile/presentation/public_profile_screen.dart';
 import 'package:pacific_dating_app/features/chat/domain/models/chat_model.dart';
@@ -19,6 +22,7 @@ import 'package:pacific_dating_app/features/chat/presentation/widgets/voice_note
 import 'package:pacific_dating_app/core/services/presence_service.dart';
 import 'package:pacific_dating_app/core/services/matchmaking_service.dart';
 import 'package:pacific_dating_app/core/services/notification_service.dart';
+import 'package:pacific_dating_app/core/services/unread_messages_service.dart';
 import 'package:pacific_dating_app/core/services/push_sender.dart';
 import 'package:pacific_dating_app/core/services/user_prefs.dart';
 import 'package:pacific_dating_app/core/widgets/heart_loader.dart';
@@ -79,6 +83,10 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // Seen-receipt bookkeeping that must NEVER setState during build.
   bool _seenFrameScheduled = false;
   int _renderedMessageCount = 0;
+
+  // Cache ya ujumbe wa chat hii (storage ya simu) — offline au stream
+  // imeshindwa: ujumbe bado unaonekana, kimya, bila error ya ukurasa mzima.
+  List<Map<String, dynamic>> _cachedMessages = const [];
 
   // Newest message is at offset 0 (ListView reverse:true).
   final ScrollController _scrollController = ScrollController();
@@ -150,12 +158,19 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     _messageController.addListener(_onMessageChanged);
 
+    // Pakia ujumbe wa cache (offline) mara moja — mtumiaji anaona historia
+    // papo hapo; refresh halisi inaendelea background.
+    _loadCachedMessages();
+
     // Mark all unread messages from the peer as seen when opening the chat
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Arifa za 'message' kutoka mwenzake huyu hazionyeshwi tunapokuwa
       // ndani ya chat hii — tunaona ujumbe papo hapo.
       NotificationService.viewingChatPeerUid = widget.chat.id;
-      _markMessagesAsSeen();
+      // Badge ya unread (chat list + icon ya Chat) inafutwa PPO HAPO
+      // (optimistic — "ijifute mtumiaji akifungua ujumbe") na seen=true
+      // huandikwa DB kupitia UnreadMessagesService (sehemu MOJA).
+      unawaited(UnreadMessagesService.instance.openChat(widget.chat.id));
       _markPeerNotificationsAsRead();
       _checkChatLockStatus();
     });
@@ -207,6 +222,25 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     } catch (e) {
       debugPrint('Error checking chat lock status: $e');
     }
+  }
+
+  /// Pakia ujumbe uliohifadhiwa kwenye simu (offline fallback).
+  Future<void> _loadCachedMessages() async {
+    final String chatId = _chatId ?? '';
+    if (chatId.isEmpty) return;
+    final cached = await ChatCacheService.instance.loadMessages(chatId);
+    if (!mounted || cached.isEmpty) return;
+    setState(() => _cachedMessages = cached);
+  }
+
+  /// Hifadhi ujumbe uliowasili kwenye simu (background, kimya).
+  void _saveCachedMessages(List<Map<String, dynamic>> messages) {
+    final String chatId = _chatId ?? '';
+    if (chatId.isEmpty || messages.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ChatCacheService.instance.saveMessages(chatId, messages);
+    });
   }
 
   /// User ananunua kufungua chat to coins. Baada ya malipo,
@@ -486,55 +520,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   // ============================================================
 
   // ============================================================
-  // READ RECEIPTS
+  // READ RECEIPTS — badge (seen=true)
+  // Huduma ihamishwa kwenda UnreadMessagesService.openChat/markChatSeen
+  // (sehemu MOJA kwa app yote — zamani ilikuwa hapa na pia kwenye
+  // chat_list_screen). Privacy switch INAHESHIMIWA kwa blue ticks tu
+  // (tazama [_markAsSeen]/[_flushSeenUpdates] chini) — badge ya count
+  // daima inatoweka mtumiaji akifungua chat.
   // ============================================================
-
-  /// Marks all unread messages sent by the other person as "seen"
-  /// when this chat screen is open (WhatsApp-style read receipts).
-  ///
-  /// MUHIMU: hii ni LAZIMA ifanyike kila mara chat inapofunguliwa —
-  /// hata kama mtumiaji amezima "Read Receipts". Sababu: badge ya count
-  /// (icon ya Chat + chat list) inahesabu messages zenye seen=false.
-  /// Tukiruka UPDATE kwa sababu ya privacy switch, count haiondoki kamwe.
-  /// Privacy switch INAHESHIMIWA kwa blue ticks (✔✔ zinazoonekana na
-  /// mwenzake) — tazama [_markAsSeen]/[_flushSeenUpdates] chini.
-  ///
-  /// Kwa hiyo: seen= true inaandikwa DB (badge inatoweka), lakini kama
-  /// read receipts zimezimwa, _markAsSeen (ticks) HAZITUMWI — mwenzake
-  /// haoni kuwa umesoma. Hii ni tofauti kati ya "locally read" na
-  /// "receipt shown to peer".
-  Future<void> _markMessagesAsSeen() async {
-    final user = currentUser;
-    if (user == null || _chatId == null) return;
-
-    try {
-      await Supabase.instance.client
-          .from('messages')
-          .update({
-        'seen': true,
-        // Tarehe kamili ya kusoma — kwa ajili ya historia + kuthibitisha
-        // kuwa badge ya unread inapungua pale UJUMBE unaposomwa, sio
-        // pale orodha ya messages inapofunguliwa.
-        'seen_at': DateTime.now().toIso8601String(),
-      })
-          .eq('chat_id', _chatId!)
-          .eq('receiver_id', user.id)
-          .eq('seen', false);
-    } catch (e) {
-      // FALLBACK (DB za zamani bila column ya seen_at): seen bado
-      // LAZIMA iandikwe — vinginevyo badge ya unread haiondoki kamwe.
-      try {
-        await Supabase.instance.client
-            .from('messages')
-            .update({'seen': true})
-            .eq('chat_id', _chatId!)
-            .eq('receiver_id', user.id)
-            .eq('seen', false);
-      } catch (e2) {
-        debugPrint('Pacific: mark-seen failed: $e2');
-      }
-    }
-  }
 
   Future<void> _toggleVoiceRecording() async {
     if (!mounted) return;
@@ -757,11 +749,11 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
       switch (type) {
         case 'image':
-          previewText = 'ðŸ“¸ Picha';
+          previewText = ' Picha';
           break;
 
         case 'audio':
-          previewText = 'ðŸŽ™ï¸ Ujumbe wa Sauti';
+          previewText = 'Ujumbe wa Sauti';
           break;
 
         default:
@@ -909,12 +901,28 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
     );
   }
 
+  /// "Jaribu tena" — sasisha mtandao + fungua upya stream ya ujumbe.
+  /// Hakuna loader wa ukurasa mzima: cache inaonekana huku refresh
+  /// ikiendelea background.
+  Future<void> _refreshMessages() async {
+    final user = currentUser;
+    final String? chatId = _chatId;
+    if (user == null || chatId == null) return;
+    unawaited(ConnectivityService.instance.refresh());
+    _messagesStream = Supabase.instance.client
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('chat_id', chatId)
+        .order('created_at', ascending: false);
+    if (mounted) setState(() {});
+  }
+
   // ============================================================
   // READ RECEIPT (blue ticks ✔✔) — ujumbe wa mwenzake unawekwa alama
   // seen unapoonekana screen (kama bado haujawekwa). Hii ndiyo inayomwonyesha
   // MWENZAKE kuwa umesoma — kwa hiyo INAHESHIMU privacy switch ya
   // "Read Receipts": ukizima, ticks hazitumwi (lakini badge yako mwenyewe
-  // bado inatoweka kupitia _markMessagesAsSeen, tazama juu).
+  // bado inatoweka kupitia UnreadMessagesService.openChat, tazama juu).
   // ============================================================
 
   /// Pending seen updates collected during a single build cycle;
@@ -931,7 +939,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
 
     // Mtumiaji amezima "Read Receipts" — usimtumie mwenzake receipt
     // (blue ticks). Badge yake mwenyewe bado inatoweka kupitia
-    // _markMessagesAsSeen — privacy hapa, si count.
+    // UnreadMessagesService.openChat — privacy hapa, si count.
     if (!UserPrefs.instance.readReceiptsEnabled) return;
 
     // Only mark peer's messages (not my own).
@@ -956,25 +964,15 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
   void _flushSeenUpdates() {
     if (_pendingSeenIds.isEmpty || !mounted) return;
 
-    final client = Supabase.instance.client;
     final idsToUpdate = List<String>.from(_pendingSeenIds);
     _pendingSeenIds.clear();
 
-    client
-        .from('messages')
-        .update({'seen': true, 'seen_at': DateTime.now().toIso8601String()})
-        .inFilter('id', idsToUpdate)
-        .catchError((_) async {
-      // FALLBACK (DB za zamani bila seen_at): seen bado iandikwe.
-      try {
-        await client
-            .from('messages')
-            .update({'seen': true})
-            .inFilter('id', idsToUpdate);
-      } catch (_) {
-        // Silently ignore — read receipt is best-effort.
-      }
-    });
+    // Sehemu MOJA ya kuandika seen (fallback ikiwa DB haina seen_at ndani)
+    // — UnreadMessagesService. Zamani code hii ilijirudia hapa na kwenye
+    // _markMessagesAsSeen (1+1); sasa ni 2+3=5.
+    unawaited(
+      UnreadMessagesService.instance.markMessagesSeenByIds(idsToUpdate),
+    );
   }
 
   // ============================================================
@@ -1408,7 +1406,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         Container(
                           margin:
                           const EdgeInsets.only(
-                            right: 2,
+                            right: 4,
                           ),
                           decoration:
                           BoxDecoration(
@@ -1428,13 +1426,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                             ],
                             isVideoCall: false,
                             resourceID: ZegoCallService.resourceID,
-                            buttonSize: const Size(44, 44),
-                            borderRadius: 22,
+                            buttonSize: const Size(40, 40),
+                            borderRadius: 20,
                             icon: ButtonIcon(
                               icon: Icon(
                                 Icons.call_rounded,
                                 color: AppColors.primaryDeep,
-                                size: 21,
+                                size: 20,
                               ),
                             ),
                             // Omba microphonе kabla ya kutuma invitation.
@@ -1456,7 +1454,7 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                         Container(
                           margin:
                           const EdgeInsets.only(
-                            right: 2,
+                            right: 4,
                           ),
                           decoration:
                           BoxDecoration(
@@ -1476,13 +1474,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                             ],
                             isVideoCall: true,
                             resourceID: ZegoCallService.resourceID,
-                            buttonSize: const Size(44, 44),
-                            borderRadius: 22,
+                            buttonSize: const Size(40, 40),
+                            borderRadius: 20,
                             icon: ButtonIcon(
                               icon: Icon(
                                 Icons.videocam_rounded,
                                 color: AppColors.primaryDeep,
-                                size: 22,
+                                size: 21,
                               ),
                             ),
                             // Omba camera + microphonе kabla ya kutuma invitation.
@@ -1518,8 +1516,13 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                   .card_giftcard_rounded,
                               color: AppColors
                                   .coinGoldDark,
-                              size: 24,
+                              size: 22,
                             ),
+                            constraints: const BoxConstraints(
+                              minWidth: 40,
+                              minHeight: 40,
+                            ),
+                            padding: EdgeInsets.zero,
                             onPressed: () {
                               GiftModalBottomSheet.show(
                                 context,
@@ -1606,30 +1609,52 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                           stream: _messagesStream,
                           builder:
                               (context, snapshot) {
-                            if (snapshot
-                                .connectionState ==
-                                ConnectionState
-                                    .waiting &&
+                            List<Map<String, dynamic>> messages =
+                                snapshot.data ?? [];
+
+                            if (messages.isNotEmpty) {
+                              // Ujumbe halisi umewasili — hifadhi kwenye
+                              // simu background (offline fallback baadaye).
+                              _saveCachedMessages(messages);
+                            }
+
+                            final bool emptyLive = !snapshot.hasData ||
+                                (snapshot.data?.isEmpty ?? true);
+
+                            if (emptyLive && _cachedMessages.isNotEmpty) {
+                              // Offline/stream imeshindwa — onyesha historia
+                              // ya cache kimya; refresh inaendelea
+                              // background bila error ya ukurasa mzima.
+                              messages = _cachedMessages;
+                            } else if (snapshot
+                                        .connectionState ==
+                                    ConnectionState
+                                        .waiting &&
                                 !snapshot.hasData) {
-                              return const Center(
-                                child:
-                                HeartLoader(size: 60),
-                              );
-                            }
-
-                            if (snapshot.hasError) {
-                              return Center(
-                                child: Text(
-                                  "Failed to load messages.",
-                                  style: TextStyle(
-                                    color: AppColors.textSecondary,
+                              if (_cachedMessages.isNotEmpty) {
+                                messages = _cachedMessages;
+                              } else {
+                                return const Center(
+                                  child:
+                                  HeartLoader(size: 60),
+                                );
+                              }
+                            } else if (snapshot.hasError &&
+                                messages.isEmpty) {
+                              if (_cachedMessages.isNotEmpty) {
+                                messages = _cachedMessages;
+                              } else {
+                                return Center(
+                                  child: NoInternetView(
+                                    message:
+                                        'Hakuna internet. Unganisha mtandao kisha jaribu tena.',
+                                    onRetry: _refreshMessages,
                                   ),
-                                ),
-                              );
+                                );
+                              }
                             }
 
-                            if (!snapshot.hasData ||
-                                snapshot.data!.isEmpty) {
+                            if (messages.isEmpty) {
                               return Center(
                                 child: Text(
                                   "Anzisha mazungumzo leo!",
@@ -1639,8 +1664,6 @@ class _IndividualChatScreenState extends State<IndividualChatScreen>
                                 ),
                               );
                             }
-
-                            final messages = snapshot.data!;
 
                             // Post-frame only: queue seen-receipts + scroll +
                             // count WITHOUT mutating state during build, so

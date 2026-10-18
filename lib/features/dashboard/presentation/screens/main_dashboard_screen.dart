@@ -18,6 +18,8 @@ import 'package:pacific_dating_app/features/profile/presentation/profile_screen.
 import 'package:pacific_dating_app/features/profile/presentation/screens/search_screen.dart';
 import 'package:pacific_dating_app/core/widgets/app_notification_overlay.dart';
 import 'package:pacific_dating_app/core/constants/app_radius.dart';
+import 'package:pacific_dating_app/core/services/profile_photo_service.dart';
+import 'package:pacific_dating_app/core/services/unread_messages_service.dart';
 
 class MainDashboardScreen extends StatefulWidget {
   const MainDashboardScreen({super.key});
@@ -87,23 +89,22 @@ class _MainDashboardScreenState extends State<MainDashboardScreen> {
 
 /// Icon ya Chat kwenye BottomNavigationBar yenye badge ya idadi ya
 /// messages zisizosomwa (receiver_id = mimi na seen = false).
-/// Inasikiliza realtime — count inajisasisha yenyewe bila reload.
+///
+/// Hesabu zinatoka UnreadMessagesService — stream MOJA iliyoshirikishwa
+/// na chat list (zamani kila build ilifungua subscription MPYA ya
+/// realtime — leak + badge haiondoki kamwe).
 class _ChatTabIcon extends StatelessWidget {
   const _ChatTabIcon();
 
   @override
   Widget build(BuildContext context) {
-    final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
-    if (myUid.isEmpty) return const Icon(Icons.chat_bubble_rounded);
-
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: Supabase.instance.client
-          .from('messages')
-          .stream(primaryKey: ['id'])
-          .eq('receiver_id', myUid)
-          .eq('seen', false),
+    return StreamBuilder<Map<String, int>>(
+      stream: UnreadMessagesService.instance.countsStream,
+      initialData: UnreadMessagesService.instance.counts,
       builder: (context, snapshot) {
-        final unread = snapshot.data?.length ?? 0;
+        final int unread = (snapshot.data ?? const <String, int>{})
+            .values
+            .fold(0, (sum, n) => sum + n);
         const icon = Icon(Icons.chat_bubble_rounded);
         if (unread <= 0) return icon;
         return Badge.count(
@@ -502,6 +503,12 @@ class _DiscoverTabState extends State<DiscoverTab> {
   // (recycle) swipe zikishaisha watu halisi wote, ili stack zisiishe kamwe.
   final List<Map<String, dynamic>> _swipedProfiles = [];
 
+  // PHOTO BROWSING (swipe kushoto/kulia): picha za kila profile (max 6)
+  // zilizopangwa kwa position. Key = uid; value = URLs (0 = picha ya mbele).
+  final Map<String, List<String>> _photoCache = {};
+  final Set<String> _photoLoadingUids = {};
+  int _photoIndex = 0; // picha inayoonekana kwenye card ya mbele sasa
+
   @override
   void initState() {
     super.initState();
@@ -658,12 +665,60 @@ class _DiscoverTabState extends State<DiscoverTab> {
   /// card moja mbele — HAIANDIKI chochote kwenye database. Kupendana
   /// (like/match) kunarekodiwa TU kupitia kitufe cha "Match" cha kwenye
   /// card ([_likeProfile]) — tazama chini.
+  /// Picha za card ya mbele (max 6, kwa position). Fallback: picha ya mbele
+  /// (profile['image']) kama profile_photos hazijapakiwa/hazipo.
+  List<String> _cardPhotoUrls(Map<String, dynamic> profile) {
+    final String uid = (profile['uid'] as String?) ?? '';
+    final String image = (profile['image'] as String?) ?? '';
+    final cached = _photoCache[uid];
+    if (cached != null && cached.isNotEmpty) return cached;
+    return image.isNotEmpty ? <String>[image] : <String>[];
+  }
+
+  /// Pakia picha za front-card (best-effort) na zionyeshe papo hapo.
+  Future<void> _ensureFrontPhotos() async {
+    if (_profiles.isEmpty || _topCardIndex >= _profiles.length) return;
+    final String uid = (_profiles[_topCardIndex]['uid'] as String?) ?? '';
+    if (uid.isEmpty) return;
+    if (_photoCache.containsKey(uid) || _photoLoadingUids.contains(uid)) return;
+    _photoLoadingUids.add(uid);
+    try {
+      final photos = await ProfilePhotoService.instance.fetchPhotos(uid);
+      final urls = photos
+          .map((p) => p.url)
+          .where((u) => u.startsWith('http'))
+          .toList();
+      if (!mounted) return;
+      // Hata ikiwa tupu, weka listing ili tusipakie tena; card itatumia fallback.
+      setState(() => _photoCache[uid] = urls);
+    } catch (_) {
+      // Kimya — card inaonyesha picha ya mbele/fallback bila kupasuka.
+    } finally {
+      _photoLoadingUids.remove(uid);
+    }
+  }
+
+  /// Swipe kushoto/kulia = kupapua picha 6 za mtu (SIO like/pass, SIO match).
+  /// Index inazungushwa (wrap) ndani ya orodha ya picha zilizopo.
+  void _cyclePhoto(int direction) {
+    if (_profiles.isEmpty || _topCardIndex >= _profiles.length) return;
+    final urls = _cardPhotoUrls(_profiles[_topCardIndex]);
+    if (urls.length <= 1) return;
+    setState(() {
+      _photoIndex = (_photoIndex + direction) % urls.length;
+      if (_photoIndex < 0) _photoIndex += urls.length;
+      _dragOffset = Offset.zero;
+      _isDragging = false;
+    });
+  }
+
   void _advanceCard() {
     if (_profiles.isEmpty || _topCardIndex >= _profiles.length) return;
 
     setState(() {
       _dragOffset = Offset.zero;
       _isDragging = false;
+      _photoIndex = 0;
     });
 
     // Pila card iendele: profile iliyopita inahifadhiwa kwenye
@@ -709,6 +764,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
     setState(() {
       _dragOffset = Offset(0, -800);
       _isDragging = false;
+      _photoIndex = 0;
     });
 
     if (targetUid != null) {
@@ -917,6 +973,9 @@ class _DiscoverTabState extends State<DiscoverTab> {
   @override
   Widget build(BuildContext context) {
     double dragProgress = (_dragOffset.dy / 300).clamp(-1.0, 1.0);
+    // Pakia picha za front-card (best-effort) ili swipe ya kushoto/kulia
+    // iwe kupapua picha 6. Salama kwa sababu _ensureFrontPhotos inajilinda.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureFrontPhotos());
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -1054,17 +1113,23 @@ class _DiscoverTabState extends State<DiscoverTab> {
               // FRONT CARD
               Positioned.fill(
                 child: GestureDetector(
-                  onVerticalDragStart: (_) => setState(() => _isDragging = true),
-                  onVerticalDragUpdate: (details) {
+                  onPanStart: (_) => setState(() => _isDragging = true),
+                  onPanUpdate: (details) {
                     setState(() {
-                      _dragOffset += Offset(0, details.delta.dy);
+                      _dragOffset += details.delta;
                     });
                   },
-                  onVerticalDragEnd: (details) {
-                    // Swipe = SCROLL TU: up au down — card inasogeza mbele,
-                    // hakuna like/pass inayorekodiwa kwenye database.
-                    if (_dragOffset.dy < -130 || _dragOffset.dy > 130) {
+                  onPanEnd: (details) {
+                    // SWIPE JUU/CHINI = mtu mwingine (scroll tu, HAIANDIKI
+                    // database, HAIANDIKI match). SWIPE KUSHOTO/KULIA =
+                    // kupapua picha 6 za mtu (page ya picha), sio like/pass.
+                    const double vThreshold = 130;
+                    final double dx = _dragOffset.dx;
+                    final double dy = _dragOffset.dy;
+                    if (dy.abs() >= vThreshold && dy.abs() >= dx.abs()) {
                       _advanceCard();
+                    } else if (dx.abs() >= 80) {
+                      _cyclePhoto(dx < 0 ? 1 : -1);
                     } else {
                       setState(() {
                         _dragOffset = Offset.zero;
@@ -1075,7 +1140,10 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   child: AnimatedContainer(
                     duration: _isDragging ? Duration.zero : const Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
-                    transform: Matrix4.translationValues(0, _dragOffset.dy, 0)
+                    // Horizontal ni DAMPED (0.25) ili isionekane kama like/pass;
+                    // vertical ndio inasogeza card.
+                    transform: Matrix4.translationValues(
+                            _dragOffset.dx * 0.25, _dragOffset.dy, 0)
                       ..rotateZ(_dragOffset.dy * 0.0003),
                     child: Stack(
                       children: [
@@ -1136,21 +1204,27 @@ class _DiscoverTabState extends State<DiscoverTab> {
   }
 
   Widget _buildCardUI(Map<String, dynamic> profile, {required bool isFront}) {
-    final String imageUrl = (profile['image'] as String?) ?? '';
     final String name = (profile['name'] as String?) ?? '';
+
+    // Picha za profile (max 6) kwa position; index inazungushwa na swipe ya
+    // kushoto/kulia. Fallback: picha ya mbele (profile['image']).
+    final List<String> photos = _cardPhotoUrls(profile);
+    final int count = photos.length;
+    final int idx = count == 0 ? 0 : _photoIndex.clamp(0, count - 1).toInt();
+    final String photoUrl = count == 0 ? '' : photos[idx];
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: AppRadius.xl,
-        image: imageUrl.isNotEmpty
+        image: photoUrl.isNotEmpty
             ? DecorationImage(
-                image: NetworkImage(imageUrl),
+                image: NetworkImage(photoUrl),
                 fit: BoxFit.cover,
                 // Broken URL -> real avatar fallback instead of crash.
                 onError: (_, __) {},
               )
             : null,
-        color: imageUrl.isEmpty ? const Color(0xFF252525) : null,
+        color: photoUrl.isEmpty ? const Color(0xFF252525) : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.2),
@@ -1162,7 +1236,7 @@ class _DiscoverTabState extends State<DiscoverTab> {
       child: Stack(
         children: [
           // Real avatar fallback: initials on a gradient background.
-          if (imageUrl.isEmpty)
+          if (photoUrl.isEmpty)
             Center(
               child: Text(
                 name.isNotEmpty ? name[0].toUpperCase() : '?',
@@ -1172,6 +1246,15 @@ class _DiscoverTabState extends State<DiscoverTab> {
                   fontWeight: FontWeight.w900,
                 ),
               ),
+            ),
+          // PHOTO STRIP (Tinder-style): picha ngapi zimebaki + iliyopo.
+          // Inaonekana kwenye front card tu wakati wa kupapua picha.
+          if (isFront && count > 1)
+            Positioned(
+              top: 10,
+              left: 14,
+              right: 14,
+              child: _photoStrip(count: count, index: idx),
             ),
           Container(
             decoration: BoxDecoration(
@@ -1356,6 +1439,26 @@ class _DiscoverTabState extends State<DiscoverTab> {
 
   /// Likes ❤️ + Gifts 🎁 row on the Discover card.
   /// Safe against null/missing keys (old schema has no counters).
+  /// Strip ndogo ya picha juu ya card (Tinder-style): sehemu zote za picha,
+  /// zilizopo zimejaa, zilizobaki ni transparent. Inaonyesha picha iliyopo.
+  Widget _photoStrip({required int count, required int index}) {
+    return Row(
+      children: List.generate(count, (i) {
+        final bool active = i == index;
+        return Expanded(
+          child: Container(
+            height: 4,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: active ? Colors.white : Colors.white.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
   Widget _buildCardStatsRow(Map<String, dynamic> profile) {
     final int likes = (profile['likesCount'] as num?)?.toInt() ?? 0;
     final int gifts = (profile['giftsCount'] as num?)?.toInt() ?? 0;

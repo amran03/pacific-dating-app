@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 // Keep import so AppLanguage stays initialized; UI is English-only now.
-import 'core/localization/app_language.dart';
-import 'core/localization/app_theme.dart';
-import 'core/services/auth_gate.dart';
-import 'core/services/call_service.dart';
-import 'core/services/notification_service.dart';
-import 'core/services/presence_tracker.dart';
-import 'core/services/push_service.dart';
-import 'core/services/supabase_service.dart';
-import 'core/services/zego_call_service.dart';
+import 'package:pacific_dating_app/core/localization/app_language.dart';
+import 'package:pacific_dating_app/core/localization/app_theme.dart';
+import 'package:pacific_dating_app/core/services/auth_gate.dart';
+import 'package:pacific_dating_app/core/services/call_service.dart';
+import 'package:pacific_dating_app/services/connectivity_service.dart';
+import 'package:pacific_dating_app/core/services/notification_service.dart';
+import 'package:pacific_dating_app/core/services/presence_tracker.dart';
+import 'package:pacific_dating_app/core/services/push_service.dart';
+import 'package:pacific_dating_app/core/services/supabase_service.dart';
+import 'package:pacific_dating_app/core/services/unread_messages_service.dart';
+import 'package:pacific_dating_app/core/services/zego_call_service.dart';
+import 'package:pacific_dating_app/core/widgets/offline_toast.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,6 +27,16 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Supabase initialization failed: $e');
   }
+
+  // Mtandao (offline detection) — toast fupi "Hakuna internet" (chini ya
+  // sekunde 5, inaondoka yenyewe) inasikiliza kutoka MaterialApp.builder
+  // hapo chini (OfflineToastListener).
+  ConnectivityService.instance.start();
+
+  // Hesabu za ujumbe usiosomwa (badge) — subscription MOJA iliyoshirikishwa
+  // na chat list + icon ya Chat; pia inafuta count papo hapo chat
+  // inapofunguliwa (UnreadMessagesService.openChat).
+  UnreadMessagesService.instance.start();
 
   // Push (FCM) — registers the background handler BEFORE runApp so
   // notifications arrive even when the app is backgrounded or killed.
@@ -78,6 +91,9 @@ class MyApp extends StatelessWidget {
                 return Stack(
                   children: [
                     const PresenceTracker(),
+                    // Toast ya offline (chini ya sekunde 5, si banner ya
+                    // kudumu) — inasikiliza tu; hakuna UI ya kudumu.
+                    const OfflineToastListener(),
                     child!,
                   ],
                 );

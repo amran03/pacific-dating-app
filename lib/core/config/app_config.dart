@@ -35,4 +35,14 @@ class AppConfig {
       supabaseUrl.startsWith('http') &&
       supabasePublishableKey.startsWith('sb_publishable_') &&
       supabasePublishableKey.length > 20;
+
+  /// Domain ya "synthetic email" kwa mtirifiko wa simu (namba ya simu
+  /// inageuzwa kuwa `<255...>@<domain>` ili iingie Supabase Auth).
+  ///
+  /// MUHIMU: LAZIMA liwe na MX records (GoTrue inakagua DNS kabla ya
+  /// signup) — vinginevyo kila signup ya simu inaonekana "Email address
+  /// is invalid". Domeni `pacificdatingapp.com` HAIPATIKANI DNS (Okt 2026):
+  /// register domain halisi + weka MX (hata isiyohudumia barua pepe), kisha
+  /// badilisha hapa. (Mtirifiko wa email halisi huu haiguwi.)
+  static const String syntheticEmailDomain = 'pacificdatingapp.com';
 }

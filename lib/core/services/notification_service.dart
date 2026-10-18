@@ -94,12 +94,50 @@ class NotificationService {
     // Mzunguko wa FCM wa mbele (foreground) — heshimu switch ya
     // Settings > Notifications papo hapo (UserPrefs ni cache halisi).
     if (!UserPrefs.instance.notificationsEnabled) return;
+
+    // Payload: type|fromUid|fromName
+    final parts = payload.split('|');
+    final String type = parts.isNotEmpty ? parts[0] : '';
+    final String fromUid = parts.length > 1 ? parts[1] : '';
+
+    // User yuko ndani ya chat na mzunguko huu — njia ya realtime imezima
+    // arifa kwa makusudi (inazuia spam wakati mnazungumza); FCM isikate
+    // mpango huo.
+    if (type == 'message' &&
+        viewingChatPeerUid != null &&
+        fromUid == viewingChatPeerUid) {
+      return;
+    }
+
+    // Zuia marudiano: kila ujumbe unaingiza row kwenye notifications
+    // (realtime inaonyesha) NA kinafanya FCM push — bila kizuizi hiki
+    // mtumiaji mwenye app wazi anapata arifa mbili kwa ujumbe mmoja.
+    if (!_claimShow('$type|$fromUid|$title|$body')) return;
+
     await showNotification(
       id: payload.hashCode,
       title: title,
       body: body,
       payload: payload,
     );
+  }
+
+  // ============================================================
+  // DEDUPE — mtiririko wa realtime na mtiririko wa FCM foreground
+  // huona ujumbe ULE ULE (title/body/from_uid zinafanana kabisa).
+  // Cache hii ndiyo hufanya ujumbe mmoja usionyeshwe mara mbili.
+  // ============================================================
+  static final Map<String, DateTime> _recentlyShown = {};
+
+  /// Rudisha true mara ya KWANZA kwa kila key ndani ya sekunde 15;
+  /// false kama tayari imeonyeshwa hivi karibuni.
+  static bool _claimShow(String key) {
+    final now = DateTime.now();
+    _recentlyShown.removeWhere((_, at) => now.difference(at).inSeconds > 15);
+    final prev = _recentlyShown[key];
+    if (prev != null && now.difference(prev).inSeconds <= 15) return false;
+    _recentlyShown[key] = now;
+    return true;
   }
 
   Future<void> _fetchUserPreference(String uid) async {
@@ -329,12 +367,25 @@ class NotificationService {
         debugPrint('Pacific: notif to-uid mismatch but showing (legacy id format)');
       }
 
+      // App iko BACKGROUND (realtime inaweza kupokea wakati process bado
+      // iko hai) — FCM ndio itaonyesha kupitia background isolate (cache
+      // ya dedupe haishiriki kati ya isolates). Hapa tunazuia marudiano:
+      // arifa moja tu itaonekana bila kujali hali ya app.
+      final String? lifecycle = WidgetsBinding.instance.lifecycleState?.name;
+      if (lifecycle != null && lifecycle != 'resumed') continue;
+
       final payload = '$type|$fromUid|${row['from_name']?.toString() ?? ''}';
+      final title = row['title']?.toString() ?? 'Pacific';
+      final body = row['description']?.toString() ?? '';
+
+      // Dedupe: kama FCM foreground tayari imeonyesha ujumbe huu hivi
+      // karibuni (au kinyume chake), usionyeshe mara ya pili.
+      if (!_claimShow('$type|$fromUid|$title|$body')) continue;
 
       await showNotification(
         id: id.hashCode,
-        title: row['title']?.toString() ?? 'Pacific',
-        body: row['description']?.toString() ?? '',
+        title: title,
+        body: body,
         payload: payload,
       );
     }

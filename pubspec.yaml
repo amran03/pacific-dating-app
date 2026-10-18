@@ -22,8 +22,15 @@ dependencies:
   # Supabase
   supabase_flutter: ^2.8.3
 
+  # Google Sign-In — Supabase inaingia kwa idToken (native flow, si OAuth
+  # web). Inahitaji Android + Web OAuth clients kwenye Google Cloud Console.
+  google_sign_in: ^6.3.0
+
   # Media & permissions
   image_picker: ^1.1.2
+  flutter_image_compress: ^2.3.0
+  cached_network_image: ^3.4.1
+  smooth_page_indicator: ^1.2.0+3
   record: ^6.2.1
   audioplayers: ^6.0.0
   path_provider: ^2.1.4
@@ -31,6 +38,10 @@ dependencies:
 
   # Location
   geolocator: ^13.0.2
+
+  # Upatikanaji wa mtandao (offline detection — banner + friendly errors)
+  connectivity_plus: ^6.1.4
+  internet_connection_checker_plus: ^2.7.0
 
   # Real (system) notifications
   flutter_local_notifications: ^17.2.3
